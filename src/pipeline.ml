@@ -11,7 +11,7 @@ let dockerfile =
       FROM nixos/nix
       COPY scripts/shell.nix shell.nix 
       COPY scripts/script.r script.r
-      COPY inputs/denmark.csv denmark.csv
+      COPY input/denmark.csv denmark.csv
     |}
   |> Current.return
 
@@ -20,4 +20,12 @@ let v ~repo () =
   let src = Git.Local.head_commit repo in
   let image = Docker.build ~dockerfile ~pull ~timeout (`Git src) in
   Docker.run image ~run_args:[]
-    ~args:[ "nix-shell"; "shell.nix"; "--command"; "Rscript"; "--help" ]
+    ~args:
+      [
+        "nix-shell";
+        "shell.nix";
+        "--command";
+        "Rscript";
+        "script.r";
+        "denmark.csv";
+      ]

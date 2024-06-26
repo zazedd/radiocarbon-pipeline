@@ -4,7 +4,7 @@ library(rcarbon)
 # Like python, the only things that are fast are functions that call compiled C code.
 # We should try to use the stdlib as much as possible
 
-args <- commandArgs(trailingOnly = TRUE)
+args <- commandArgs(trailingOnly <- TRUE)
 
 if (length(args) == 0) {
   stop("At least one argument must be supplied (input file).csv", call. = FALSE)
