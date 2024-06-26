@@ -9,9 +9,7 @@ let dockerfile =
   `Contents
     {|
       FROM nixos/nix
-      COPY ./scripts/flake.nix flake.nix
-      COPY ./scripts/flake.lock flake.lock
-      RUN nix develop --extra-experimental-features 'nix-command flakes' 
+      COPY scripts/shell.nix shell.nix 
     |}
   |> Current.return
 
@@ -19,4 +17,5 @@ let v ~repo () =
   Git.Local.repo repo |> Fpath.to_string |> Format.printf "%s@.";
   let src = Git.Local.head_commit repo in
   let image = Docker.build ~dockerfile ~pull ~timeout (`Git src) in
-  Docker.run image ~args:[ "Rscript"; "--help" ]
+  Docker.run image ~run_args:[]
+    ~args:[ "nix-shell"; "shell.nix"; "--command"; "Rscript"; "--help" ]
