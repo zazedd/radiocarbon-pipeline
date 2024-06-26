@@ -6,6 +6,7 @@
    current.cache
    current_git
    current_web
+   current_docker
    cmdliner
    lwt
    lwt.unix
