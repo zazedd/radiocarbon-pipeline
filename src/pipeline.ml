@@ -1,29 +1,13 @@
 (*open Current.Syntax*)
 module Git = Current_git
-module Docker = Current_docker.Default
+module Nix = Current_nix.Default
 
 let timeout = Duration.of_hour 1
 let pull = false
 
-let dockerfile =
-  (* The nix-shell command here will cache the result for further use,
-     it is not for actually spawning a shell *)
-  `Contents
-    {|
-      FROM nixos/nix
-      COPY scripts/shell.nix shell.nix 
-      COPY scripts/script.r script.r
-      COPY inputs/denmark.csv denmark.csv
-      RUN nix-shell shell.nix
-    |}
-  |> Current.return
-
 let v ~repo () =
   let src = Git.Local.head_commit repo in
-  let image = Docker.build ~dockerfile ~pull ~timeout (`Git src) in
-  Docker.run image ~run_args:[]
-    ~args:
-      [ "nix-shell"; "shell.nix"; "--command"; "Rscript script.r denmark.csv" ]
+  Nix.build ~timeout (`Git src)
 
 (*
    TODO: 1

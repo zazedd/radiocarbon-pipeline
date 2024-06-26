@@ -11,7 +11,7 @@
   in
   with pkgs;
   pkgs.mkShell {
-    buildInputs = [ R ];
+    buildInputs = [ R git ];
     packages = [ ourRPackages.rcarbon ];
   }
 
