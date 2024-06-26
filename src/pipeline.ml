@@ -10,6 +10,8 @@ let dockerfile =
     {|
       FROM nixos/nix
       COPY scripts/shell.nix shell.nix 
+      COPY scripts/script.r script.r
+      COPY inputs/denmark.csv denmark.csv
     |}
   |> Current.return
 
