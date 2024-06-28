@@ -46,7 +46,7 @@ let v ~repo () =
   let script_runs =
     List.map
       (fun file ->
-        let output_folder = Fpath.v "output/" in
+        let output_folder = Fpath.v "outputs/" in
         let output_file =
           file |> Fpath.v |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
           |> Fpath.add_ext "csv"
@@ -66,15 +66,7 @@ let v ~repo () =
     script_runs;
   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
   |> Result.value ~default:();
-  Nix.shell
-    ~args:
-      [
-        [
-          "Rscript"; "scripts/script.r"; "inputs/denmark.csv"; "outputs/out.csv";
-        ];
-        [ "echo"; "hello" ];
-      ]
-    ~timeout (`Git src)
+  Nix.shell ~args:script_runs ~timeout (`Git src)
 
 (*
    TODO: 1
