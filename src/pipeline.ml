@@ -5,27 +5,34 @@ module Nix = Current_nix.Default
 let pp_sp_label = Fmt.(option (sp ++ string))
 let timeout = Duration.of_hour 1
 let pull = false
-let last_commit : Git.Commit.t Current.t option ref = ref None
-
-module Git_cache = Current_cache.Make (Cache)
 
 let v ~repo () =
   let src = Git.Local.head_commit repo in
-  (match !last_commit with
-  | None -> Format.printf "none"
-  | Some _ -> Format.printf "some");
-  let last = match !last_commit with None -> src | Some c -> c in
-  let+ last_dir = Current_gitfile.directory_contents last (Fpath.v "src")
-  and+ current_dir = Current_gitfile.directory_contents src (Fpath.v "src") in
-  Format.printf "some@.";
-  List.iter2
-    (fun (last_path, last_a) (current_path, current_a) ->
-      Format.printf "%s\nand %s:\n%s\nvs %s@."
-        (Fpath.to_string last_path)
-        (Fpath.to_string current_path)
-        current_a last_a)
-    last_dir current_dir;
-  last_commit := Some src
+  let commit_path = Fpath.v ".commit" in
+  let+ current_commit = src in
+  let last =
+    Bos.OS.File.read commit_path
+    |> Result.value ~default:(Git.Commit.marshal current_commit)
+    |> Git.Commit.unmarshal |> Current.return
+  in
+  let _ =
+    let+ last_commit_n = last
+    and+ last_dir = Current_gitfile.directory_contents last (Fpath.v "src")
+    and+ current_dir = Current_gitfile.directory_contents src (Fpath.v "src") in
+    Format.printf "%s vs %s@."
+      (Git.Commit.hash last_commit_n)
+      (Git.Commit.hash current_commit);
+    List.iter2
+      (fun (last_path, last_a) (current_path, current_a) ->
+        Format.printf "%s\nand %s:\n%s\nvs %s@."
+          (Fpath.to_string last_path)
+          (Fpath.to_string current_path)
+          current_a last_a)
+      last_dir current_dir;
+    Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
+  in
+
+  ()
 
 (*  Nix.shell*)
 (*    ~args:*)
