@@ -9,30 +9,35 @@ let pull = false
 let v ~repo () =
   let src = Git.Local.head_commit repo in
   let commit_path = Fpath.v ".commit" in
-  let+ current_commit = src in
+  Current.component "grab previous commit%a" pp_sp_label None
+  |>
+  let** current_commit = src in
   let last =
     Bos.OS.File.read commit_path
     |> Result.value ~default:(Git.Commit.marshal current_commit)
     |> Git.Commit.unmarshal |> Current.return
   in
-  let _ =
-    let+ last_commit_n = last
-    and+ last_dir = Current_gitfile.directory_contents last (Fpath.v "src")
-    and+ current_dir = Current_gitfile.directory_contents src (Fpath.v "src") in
-    Format.printf "%s vs %s@."
-      (Git.Commit.hash last_commit_n)
-      (Git.Commit.hash current_commit);
-    List.iter2
-      (fun (last_path, last_a) (current_path, current_a) ->
-        Format.printf "%s\nand %s:\n%s\nvs %s@."
-          (Fpath.to_string last_path)
-          (Fpath.to_string current_path)
-          current_a last_a)
-      last_dir current_dir;
-    Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
+  let+ last_dir = Current_gitfile.directory_contents last (Fpath.v "inputs")
+  and+ current_dir =
+    Current_gitfile.directory_contents src (Fpath.v "inputs")
   in
-
-  ()
+  let file_name f = Fpath.rem_prefix (Fpath.parent f) f |> Option.get in
+  let considered =
+    List.fold_left
+      (fun acc (path1, hash1) ->
+        let file =
+          List.find_opt
+            (fun (path2, _) -> file_name path1 = file_name path2)
+            last_dir
+        in
+        match file with
+        | None -> path1 :: acc
+        | Some (_, hash2) -> if hash1 <> hash2 then path1 :: acc else acc)
+      [] current_dir
+  in
+  List.iter (fun a -> a |> Fpath.to_string |> Format.printf "%s@.") considered;
+  Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
+  |> Result.value ~default:()
 
 (*  Nix.shell*)
 (*    ~args:*)
