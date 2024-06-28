@@ -256,9 +256,9 @@ let contents ?schedule commit files =
   |> let> commit = commit in
      raw_git_file ?schedule commit files
 
-let directory_contents ?schedule commit directory =
+let directory_contents_hashes ?schedule commit directory ~label =
   let open Current.Syntax in
-  Current.component "read %a" Fpath.pp directory
+  Current.component "read %a" Fmt.(string) label
   |> let> commit = commit in
      raw_git_dir ?schedule commit directory
 

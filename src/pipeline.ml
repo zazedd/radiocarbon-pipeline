@@ -35,12 +35,35 @@ let v ~repo () =
   in
   Current.component "grab new/changed files%a" pp_sp_label None
   |>
-  let** last_dir = Current_gitfile.directory_contents last (Fpath.v "inputs")
+  let** last_dir =
+    Current_gitfile.directory_contents_hashes last (Fpath.v "inputs")
+      ~label:"previous"
   and* current_dir =
-    Current_gitfile.directory_contents src (Fpath.v "inputs")
+    Current_gitfile.directory_contents_hashes src (Fpath.v "inputs")
+      ~label:"current"
   in
   let considered = new_and_changed_files current_dir last_dir in
-  List.iter (fun a -> a |> Format.printf "%s@.") considered;
+  let script_runs =
+    List.map
+      (fun file ->
+        let output_folder = Fpath.v "output/" in
+        let output_file =
+          file |> Fpath.v |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
+          |> Fpath.add_ext "csv"
+        in
+        [
+          "Rscript";
+          "scripts/script.r";
+          file;
+          Fpath.(output_folder // output_file) |> Fpath.to_string;
+        ])
+      considered
+  in
+  List.iter
+    (fun a ->
+      List.iter (fun b -> Format.printf "%s " b) a;
+      Format.printf "@.")
+    script_runs;
   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
   |> Result.value ~default:();
   Nix.shell
