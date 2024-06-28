@@ -13,8 +13,7 @@ let v ~repo () =
   let src = Git.Local.head_commit repo in
   let last = match !last_commit with None -> src | Some c -> c in
   let+ last_dir = Current_gitfile.directory_contents last (Fpath.v "src")
-  and+ current_dir = Current_gitfile.directory_contents last (Fpath.v "src") in
-  last_commit := Some src;
+  and+ current_dir = Current_gitfile.directory_contents src (Fpath.v "src") in
   Format.printf "some@.";
   List.iter2
     (fun (last_path, last_a) (current_path, current_a) ->
@@ -22,7 +21,8 @@ let v ~repo () =
         (Fpath.to_string last_path)
         (Fpath.to_string current_path)
         current_a last_a)
-    last_dir current_dir
+    last_dir current_dir;
+  last_commit := Some src
 
 (*  Nix.shell*)
 (*    ~args:*)
