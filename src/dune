@@ -7,6 +7,7 @@
    current_git
    current_web
    current_nix
+   digestif
    current_docker
    cmdliner
    lwt

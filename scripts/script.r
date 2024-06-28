@@ -4,17 +4,38 @@ library(rcarbon)
 # Like python, the only things that are fast are functions that call compiled C code.
 # We should try to use the stdlib as much as possible
 
-args <- commandArgs(trailingOnly <- TRUE)
+args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) == 0) {
   stop("At least one argument must be supplied (input file).csv", call. = FALSE)
 } else if (length(args) == 1) {
-  # default output file
+  # Default output file
   args[2] <- "out.csv"
-  print("No output file specified, out.csv will be used.")
+  print("No output file specified, 'out.csv' will be used.")
+} else if (length(args) == 2) {
+  print("No subset specified, using the full dataset.")
+} else if (length(args) == 3) {
+  stop("No column value for subset specified, quitting.", call. = FALSE)
+} else if (length(args) == 4) {
+  # All required arguments are present
+  print("Subsetting data...")
 }
 
 c <- read.csv(args[[1]])
+
+if (length(args) == 4) {
+  column <- args[[3]]
+  value <- args[[4]]
+  print(column)
+  print(paste("Filtering on column:", column, "with value:", value))
+  c <- subset(c, c[[column]] == value)
+}
+
+if (nrow(c) == 0) {
+  stop("CAREFUL: No values match the subsetting provided.")
+}
+
+original_col_len <- ncol(c)
 
 confidence_interval <- 0.95
 step <- 5
@@ -72,9 +93,9 @@ c <- cbind(c, new_cols)
 
 cumulative_values <- apply(new_cols, 2, sum)
 
-new_row <- c(rep("", 11), cumulative_values)
+new_row <- c(rep("", original_col_len + 1), cumulative_values)
 
-new_row[11] <- "Cumulative Probabilities"
+new_row[original_col_len + 1] <- "Cumulative Probabilities"
 
 new_row_df <- as.data.frame(t(new_row))
 colnames(new_row_df) <- colnames(c)

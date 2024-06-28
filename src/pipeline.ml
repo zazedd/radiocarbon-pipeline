@@ -1,23 +1,41 @@
+open Current.Syntax
 module Git = Current_git
 module Nix = Current_nix.Default
 
+let pp_sp_label = Fmt.(option (sp ++ string))
 let timeout = Duration.of_hour 1
 let pull = false
-let last_commit : Git.Commit.t option ref = ref None
+let last_commit : Git.Commit.t Current.t option ref = ref None
+
+module Git_cache = Current_cache.Make (Cache)
 
 let v ~repo () =
   let src = Git.Local.head_commit repo in
-  (*let+ _ = src in*)
-  Nix.shell
-    ~args:
-      [
-        [
-          "Rscript"; "scripts/script.r"; "inputs/denmark.csv"; "outputs/out.csv";
-        ];
-        [ "echo"; "hello" ];
-      ]
-    ~timeout (`Git src)
+  let last = match !last_commit with None -> src | Some c -> c in
+  let+ last_dir = Current_gitfile.directory_contents last (Fpath.v "src")
+  and+ current_dir = Current_gitfile.directory_contents last (Fpath.v "src") in
+  last_commit := Some src;
+  Format.printf "some@.";
+  List.iter2
+    (fun (last_path, last_a) (current_path, current_a) ->
+      Format.printf "%s\nand %s:\n%s\nvs %s@."
+        (Fpath.to_string last_path)
+        (Fpath.to_string current_path)
+        current_a last_a)
+    last_dir current_dir
 
+(*  Nix.shell*)
+(*    ~args:*)
+(*      [*)
+(*        [*)
+(*          "Rscript";*)
+(*          "scripts/script.r";*)
+(*          "inputs/denmark.csv";*)
+(*          "outputs/out.csv";*)
+(*        ];*)
+(*        [ "echo"; "hello" ];*)
+(*      ]*)
+(*    ~timeout (`Git src)*)
 (*
    TODO: 1
    The inputs are fixed, we should watch over the repository, specifically the inputs/ directory
