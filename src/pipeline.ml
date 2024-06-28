@@ -22,6 +22,22 @@ let new_and_changed_files curr last =
          let folder = Fpath.v "inputs" in
          Fpath.(folder // name) |> Fpath.to_string)
 
+let generate_script_args c =
+  List.map
+    (fun file ->
+      let output_folder = Fpath.v "outputs/" in
+      let output_file =
+        file |> Fpath.v |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
+        |> Fpath.add_ext "csv"
+      in
+      [
+        "Rscript";
+        "scripts/script.r";
+        file;
+        Fpath.(output_folder // output_file) |> Fpath.to_string;
+      ])
+    c
+
 let v ~repo () =
   let src = Git.Local.head_commit repo in
   let commit_path = Fpath.v ".commit" in
@@ -42,32 +58,19 @@ let v ~repo () =
     Current_gitfile.directory_contents_hashes src (Fpath.v "inputs")
       ~label:"current"
   in
-  let considered = new_and_changed_files current_dir last_dir in
   let script_runs =
-    List.map
-      (fun file ->
-        let output_folder = Fpath.v "outputs/" in
-        let output_file =
-          file |> Fpath.v |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
-          |> Fpath.add_ext "csv"
-        in
-        [
-          "Rscript";
-          "scripts/script.r";
-          file;
-          Fpath.(output_folder // output_file) |> Fpath.to_string;
-        ])
-      considered
+    new_and_changed_files current_dir last_dir |> generate_script_args
   in
   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
   |> Result.value ~default:();
   if List.length script_runs = 0 then () |> Current.return
-  else Nix.shell ~args:script_runs ~timeout (`Git src)
+  else Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
 
 (*
    TODO: 1
    The inputs are fixed, we should watch over the repository, specifically the inputs/ directory
    and check if there are new/modified files. If so, we should run them through our script.
+   DONE!
 
    TODO: 2
    The outputs currently stay inside the temporary folder, we should remove and place them inside
