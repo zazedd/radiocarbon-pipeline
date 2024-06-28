@@ -59,14 +59,10 @@ let v ~repo () =
         ])
       considered
   in
-  List.iter
-    (fun a ->
-      List.iter (fun b -> Format.printf "%s " b) a;
-      Format.printf "@.")
-    script_runs;
   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
   |> Result.value ~default:();
-  Nix.shell ~args:script_runs ~timeout (`Git src)
+  if List.length script_runs = 0 then () |> Current.return
+  else Nix.shell ~args:script_runs ~timeout (`Git src)
 
 (*
    TODO: 1
