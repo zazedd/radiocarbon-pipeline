@@ -17,6 +17,10 @@ let new_and_changed_files curr last =
       | None -> path1 :: acc
       | Some (_, hash2) -> if hash1 <> hash2 then path1 :: acc else acc)
     [] curr
+  |> List.map (fun a ->
+         let name = Fpath.base a in
+         let folder = Fpath.v "inputs" in
+         Fpath.(folder // name) |> Fpath.to_string)
 
 let v ~repo () =
   let src = Git.Local.head_commit repo in
@@ -29,33 +33,26 @@ let v ~repo () =
     |> Result.value ~default:(Git.Commit.marshal current_commit)
     |> Git.Commit.unmarshal |> Current.return
   in
-  let+ last_dir = Current_gitfile.directory_contents last (Fpath.v "inputs")
-  and+ current_dir =
+  Current.component "grab new/changed files%a" pp_sp_label None
+  |>
+  let** last_dir = Current_gitfile.directory_contents last (Fpath.v "inputs")
+  and* current_dir =
     Current_gitfile.directory_contents src (Fpath.v "inputs")
   in
-  let considered =
-    new_and_changed_files current_dir last_dir
-    |> List.map (fun a ->
-           let name = Fpath.base a in
-           let folder = Fpath.v "inputs" in
-           Fpath.(folder // name))
-  in
-  List.iter (fun a -> a |> Fpath.to_string |> Format.printf "%s@.") considered;
+  let considered = new_and_changed_files current_dir last_dir in
+  List.iter (fun a -> a |> Format.printf "%s@.") considered;
   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
-  |> Result.value ~default:()
+  |> Result.value ~default:();
+  Nix.shell
+    ~args:
+      [
+        [
+          "Rscript"; "scripts/script.r"; "inputs/denmark.csv"; "outputs/out.csv";
+        ];
+        [ "echo"; "hello" ];
+      ]
+    ~timeout (`Git src)
 
-(*  Nix.shell*)
-(*    ~args:*)
-(*      [*)
-(*        [*)
-(*          "Rscript";*)
-(*          "scripts/script.r";*)
-(*          "inputs/denmark.csv";*)
-(*          "outputs/out.csv";*)
-(*        ];*)
-(*        [ "echo"; "hello" ];*)
-(*      ]*)
-(*    ~timeout (`Git src)*)
 (*
    TODO: 1
    The inputs are fixed, we should watch over the repository, specifically the inputs/ directory
