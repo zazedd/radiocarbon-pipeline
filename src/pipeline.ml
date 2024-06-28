@@ -5,6 +5,18 @@ module Nix = Current_nix.Default
 let pp_sp_label = Fmt.(option (sp ++ string))
 let timeout = Duration.of_hour 1
 let pull = false
+let file_name f = Fpath.rem_prefix (Fpath.parent f) f |> Option.get
+
+let new_and_changed_files curr last =
+  List.fold_left
+    (fun acc (path1, hash1) ->
+      let file =
+        List.find_opt (fun (path2, _) -> file_name path1 = file_name path2) last
+      in
+      match file with
+      | None -> path1 :: acc
+      | Some (_, hash2) -> if hash1 <> hash2 then path1 :: acc else acc)
+    [] curr
 
 let v ~repo () =
   let src = Git.Local.head_commit repo in
@@ -21,19 +33,12 @@ let v ~repo () =
   and+ current_dir =
     Current_gitfile.directory_contents src (Fpath.v "inputs")
   in
-  let file_name f = Fpath.rem_prefix (Fpath.parent f) f |> Option.get in
   let considered =
-    List.fold_left
-      (fun acc (path1, hash1) ->
-        let file =
-          List.find_opt
-            (fun (path2, _) -> file_name path1 = file_name path2)
-            last_dir
-        in
-        match file with
-        | None -> path1 :: acc
-        | Some (_, hash2) -> if hash1 <> hash2 then path1 :: acc else acc)
-      [] current_dir
+    new_and_changed_files current_dir last_dir
+    |> List.map (fun a ->
+           let name = Fpath.base a in
+           let folder = Fpath.v "inputs" in
+           Fpath.(folder // name))
   in
   List.iter (fun a -> a |> Fpath.to_string |> Format.printf "%s@.") considered;
   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
