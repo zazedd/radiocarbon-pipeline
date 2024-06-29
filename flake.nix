@@ -22,7 +22,7 @@
         with pkgs;
         {
           devShells.default = mkShell {
-            buildInputs = [ R ];
+            buildInputs = [ R git ];
             packages = [ ourRPackages.rcarbon ];
           };
         }

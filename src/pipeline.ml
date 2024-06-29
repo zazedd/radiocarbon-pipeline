@@ -64,7 +64,12 @@ let v ~repo () =
   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
   |> Result.value ~default:();
   if List.length script_runs = 0 then () |> Current.return
-  else Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
+  else
+    Nix.shell
+      ~args:
+        (script_runs
+        @ [ [ "git"; "add"; "outputs/" ]; [ "git"; "commit"; "-m"; "test" ] ])
+      ~timeout (`Git src) ~label:"R-script"
 
 (*
    TODO: 1
@@ -74,11 +79,15 @@ let v ~repo () =
 
    TODO: 2
    The outputs currently stay inside the temporary folder, we should remove and place them inside
-   the outputs/ directory at some point, commit them and push them to the repo.
+   the outputs/ directory at some point
+   DONE!
 
    TODO: 3
-   Currently only a local repository is considered, we should consider remote repositories as well.
+   Commit them and push them to the repo.
 
    TODO: 4
+   Currently only a local repository is considered, we should consider remote repositories as well.
+
+   TODO: 5
    If the script produces a PDF output, display it using Github's renderer.
 *)
