@@ -32,7 +32,15 @@ let new_and_changed_files curr last =
 
 let generate_script_args c =
   List.map
-    (fun file -> [ "Rscript"; "scripts/script.r"; file; output_file_name file ])
+    (fun file ->
+      [
+        "Rscript";
+        "scripts/script.r";
+        file;
+        output_file_name file;
+        "Site";
+        "Aussois";
+      ])
     c
 
 let v ~repo () =
@@ -68,8 +76,7 @@ let v ~repo () =
     let* _ =
       Current_gitfile.add ~label:"new outputs" (".commit" :: output_files)
     in
-    () |> Current.return
-(* Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ] *)
+    Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ]
 
 (*
    TODO: 1
