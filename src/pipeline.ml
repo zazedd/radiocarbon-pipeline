@@ -65,9 +65,12 @@ let v ~repo () =
   |> Result.value ~default:();
   if List.length script_runs = 0 then () |> Current.return
   else
-    let* _ = Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
-    and+ _ = Current_gitfile.add ~label:"outputs/" [ "outputs/" ] in
-    Current_gitfile.commit ~label:"new outputs" [ "-m"; "test" ]
+    Current.all
+      [
+        Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script";
+        Current_gitfile.add ~label:"outputs/" [ "outputs/" ];
+        Current_gitfile.commit ~label:"new outputs" [ "-m"; "test" ];
+      ]
 
 (*
    TODO: 1
