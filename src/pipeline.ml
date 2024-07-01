@@ -36,7 +36,6 @@ let generate_script_args c =
     c
 
 let v ~repo () =
-  let* _ = Current_gitfile.push ~label:"push old outputs" [ "-u" ] in
   let src = Git.Local.head_commit repo in
   let commit_path = Fpath.v ".commit" in
   Current.component "grab previous commit%a" pp_sp_label None
@@ -69,7 +68,7 @@ let v ~repo () =
     let* _ =
       Current_gitfile.add ~label:"new outputs" (".commit" :: output_files)
     in
-    Current_gitfile.commit ~label:"new outputs" [ "--all"; "-m"; "test" ]
+    Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ]
 
 (*
    TODO: 1

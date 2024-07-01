@@ -245,18 +245,26 @@ module Raw = struct
 
     let command_to_str cmd =
       match cmd with
-      | `Commit -> "commit"
+      | `Commit_push -> "commit and push"
       | `Push -> "push"
       | `Add -> "add"
       | `Status -> "status"
 
     let git_cmd cmd args =
-      let cmd = cmd |> command_to_str in
-      ("", Array.of_list (("git" :: [ cmd ]) @ args))
+      match cmd with
+      | `Commit_push ->
+          ( "",
+            Array.of_list
+              ([ "bash"; "-c"; "git"; "commit" ]
+              @ args
+              @ [ "&&"; "git"; "push"; "-u" ]) )
+      | c ->
+          let cmd = c |> command_to_str in
+          ("", Array.of_list (("git" :: [ cmd ]) @ args))
 
     module Key = struct
       type t = {
-        command : [ `Commit | `Push | `Add | `Status ];
+        command : [ `Commit_push | `Push | `Add | `Status ];
         args : string list;
       }
 
@@ -309,12 +317,12 @@ let directory_contents_hashes ?schedule commit directory ~label =
   |> let> commit = commit in
      raw_git_dir ?schedule commit directory
 
-let commit ?schedule ~label args =
+let commit_push ?schedule ~label args =
   let open Current.Syntax in
-  Current.component "git: commit %a" Fmt.(string) label
+  Current.component "git: commit and push %a" Fmt.(string) label
   |>
   let> _ = () |> Current.return in
-  GitCmds.get ?schedule No_context { command = `Commit; args }
+  GitCmds.get ?schedule No_context { command = `Commit_push; args }
 
 let push ?schedule ~label args =
   let open Current.Syntax in
