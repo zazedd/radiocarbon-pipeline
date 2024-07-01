@@ -5,7 +5,15 @@ module Nix = Current_nix.Default
 let pp_sp_label = Fmt.(option (sp ++ string))
 let timeout = Duration.of_hour 1
 let pull = false
+let output_folder = Fpath.v "outputs/"
 let file_name f = Fpath.rem_prefix (Fpath.parent f) f |> Option.get
+
+let output_file_name f =
+  let output_file =
+    f |> Fpath.v |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
+    |> Fpath.add_ext "csv"
+  in
+  Fpath.(output_folder // output_file) |> Fpath.to_string
 
 let new_and_changed_files curr last =
   List.fold_left
@@ -24,18 +32,7 @@ let new_and_changed_files curr last =
 
 let generate_script_args c =
   List.map
-    (fun file ->
-      let output_folder = Fpath.v "outputs/" in
-      let output_file =
-        file |> Fpath.v |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
-        |> Fpath.add_ext "csv"
-      in
-      [
-        "Rscript";
-        "scripts/script.r";
-        file;
-        Fpath.(output_folder // output_file) |> Fpath.to_string;
-      ])
+    (fun file -> [ "Rscript"; "scripts/script.r"; file; output_file_name file ])
     c
 
 let v ~repo () =
@@ -60,6 +57,7 @@ let v ~repo () =
   in
   let files = new_and_changed_files current_dir last_dir in
   let script_runs = generate_script_args files in
+  let output_files = List.map output_file_name files in
   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
   |> Result.value ~default:();
   if List.length script_runs = 0 then () |> Current.return
@@ -67,7 +65,7 @@ let v ~repo () =
     let* _ =
       Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
     in
-    let* _ = Current_gitfile.add ~label:"new outputs" files in
+    let* _ = Current_gitfile.add ~label:"new outputs" output_files in
     let* _ = Current_gitfile.status ~label:"st1" () in
     let* _ =
       Current_gitfile.commit ~label:"new outputs" [ "--all"; "-m"; "test" ]
