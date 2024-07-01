@@ -68,7 +68,8 @@ let v ~repo () =
     let* _ =
       Current_gitfile.add ~label:"new outputs" (".commit" :: output_files)
     in
-    Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ]
+    () |> Current.return
+(* Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ] *)
 
 (*
    TODO: 1
