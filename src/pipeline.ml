@@ -68,10 +68,12 @@ let v ~repo () =
     let* _ =
       Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
     in
-    let* x =
+    let* _ =
       Current_gitfile.commit ~label:"new outputs" [ "--all"; "-m"; "test" ]
     in
-    Unix.sleep 5;
+    let* x =
+      Current_gitfile.push ~label:"push new outputs" [ "-u"; "origin"; "nix" ]
+    in
     x |> Current.return
 
 (*
