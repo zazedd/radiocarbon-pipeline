@@ -40,7 +40,7 @@ original_col_len <- ncol(c)
 confidence_interval <- 0.95
 step <- 5
 
-c.caldates <- calibrate(x = c$C14Age, errors = c$C14SD, calCurves = "intcal20", eps=1e-15, ncores=4)
+c.caldates <- calibrate(x = c$C14Age, errors = c$C14SD, calCurves = "intcal20", eps=1e-15, ncores=4, type="full")
 
 # only consider values that are inside the confidence interval
 considered <- function(lst) {
