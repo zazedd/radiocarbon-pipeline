@@ -58,9 +58,8 @@ let v ~repo () =
     Current_gitfile.directory_contents_hashes src (Fpath.v "inputs")
       ~label:"current"
   in
-  let script_runs =
-    new_and_changed_files current_dir last_dir |> generate_script_args
-  in
+  let files = new_and_changed_files current_dir last_dir in
+  let script_runs = generate_script_args files in
   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
   |> Result.value ~default:();
   if List.length script_runs = 0 then () |> Current.return
@@ -68,7 +67,7 @@ let v ~repo () =
     let* _ =
       Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
     in
-    let* _ = Current_gitfile.add ~label:"new outputs" [ "-A" ] in
+    let* _ = Current_gitfile.add ~label:"new outputs" files in
     let* _ = Current_gitfile.status ~label:"st1" () in
     let* _ =
       Current_gitfile.commit ~label:"new outputs" [ "--all"; "-m"; "test" ]
