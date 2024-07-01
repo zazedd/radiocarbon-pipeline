@@ -252,7 +252,7 @@ module Raw = struct
 
     let git_cmd cmd args =
       let cmd = cmd |> command_to_str in
-      ("", Array.of_list (("git" :: [ cmd ]) @ args))
+      ("", Array.of_list (("pwd; git" :: [ cmd ]) @ args))
 
     module Key = struct
       type t = {
