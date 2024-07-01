@@ -36,6 +36,7 @@ let generate_script_args c =
     c
 
 let v ~repo () =
+  let* _ = Current_gitfile.push ~label:"push old outputs" [ "-u" ] in
   let src = Git.Local.head_commit repo in
   let commit_path = Fpath.v ".commit" in
   Current.component "grab previous commit%a" pp_sp_label None
@@ -65,15 +66,10 @@ let v ~repo () =
     let* _ =
       Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
     in
-    let* _ = Current_gitfile.add ~label:"new outputs" output_files in
-    let* _ = Current_gitfile.status ~label:"st1" () in
     let* _ =
-      Current_gitfile.commit ~label:"new outputs" [ "--all"; "-m"; "test" ]
+      Current_gitfile.add ~label:"new outputs" (".commit" :: output_files)
     in
-    let* _ = Current_gitfile.status ~label:"st2" () in
-    Format.printf "pushing...@.";
-    let* x = Current_gitfile.push ~label:"push new outputs" [ "-u" ] in
-    x |> Current.return
+    Current_gitfile.commit ~label:"new outputs" [ "--all"; "-m"; "test" ]
 
 (*
    TODO: 1
