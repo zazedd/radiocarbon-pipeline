@@ -287,7 +287,7 @@ module Raw = struct
       let { Key.command; args } = k in
       Current.Job.start ~level:Dangerous job >>= fun () ->
       let cmd = git_cmd command args in
-      Current.Process.exec ~cancellable:true ~job cmd
+      Current.Process.exec ~cancellable:false ~job cmd
 
     let pp = Key.pp
     let auto_cancel = true
