@@ -40,6 +40,7 @@ let generate_script_args c =
 
 let v ~repo () =
   let src = Git.Local.head_commit repo in
+  Unix.sleep 5;
   let commit_path = Fpath.v ".commit" in
   Current.component "grab previous commit%a" pp_sp_label None
   |>
@@ -68,8 +69,8 @@ let v ~repo () =
     let* _ =
       Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
     in
-    let* x = Current_gitfile.add ~label:"outputs/" [ "outputs/" ] in
-    (* and* x = Current_gitfile.commit ~label:"new outputs" [ "-m"; "test" ] in *)
+    let* _ = Current_gitfile.add ~label:"outputs/" [ "outputs/" ]
+    and* x = Current_gitfile.commit ~label:"new outputs" [ "-m"; "test" ] in
     x |> Current.return
 
 (*
