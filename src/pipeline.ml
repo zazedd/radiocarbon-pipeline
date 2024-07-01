@@ -72,9 +72,7 @@ let v ~repo () =
       Current_gitfile.commit ~label:"new outputs" [ "--all"; "-m"; "test" ]
     in
     Format.printf "pushing...@.";
-    let* x =
-      Current_gitfile.push ~label:"push new outputs" [ "-u"; "origin"; "nix" ]
-    in
+    let* x = Current_gitfile.push ~label:"push new outputs" [ "-u" ] in
     x |> Current.return
 
 (*
