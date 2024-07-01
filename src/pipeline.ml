@@ -40,7 +40,6 @@ let generate_script_args c =
 
 let v ~repo () =
   let src = Git.Local.head_commit repo in
-  Unix.sleep 5;
   let commit_path = Fpath.v ".commit" in
   Current.component "grab previous commit%a" pp_sp_label None
   |>
@@ -72,6 +71,7 @@ let v ~repo () =
     let* x =
       Current_gitfile.commit ~label:"new outputs" [ "--all"; "-m"; "test" ]
     in
+    Unix.sleep 5;
     x |> Current.return
 
 (*
