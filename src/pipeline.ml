@@ -69,7 +69,8 @@ let v ~repo () =
   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
   |> Result.value ~default:();
   if List.length script_runs = 0 then () |> Current.return
-  else
+  else (
+    Logs.info (fun f -> f "hi");
     let t = Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script" in
     let x =
       Current_gitfile.add ~label:"new outputs" (".commit" :: output_files)
@@ -78,7 +79,7 @@ let v ~repo () =
     let y =
       Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ]
     in
-    y |> Current.gate ~on:x
+    y |> Current.gate ~on:x)
 
 (*
    TODO: 1
