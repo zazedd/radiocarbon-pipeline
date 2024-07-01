@@ -253,11 +253,12 @@ module Raw = struct
     let git_cmd cmd args =
       match cmd with
       | `Commit_push ->
-          ( "",
-            Array.of_list
-              ([ "bash"; "-c"; "git"; "commit" ]
-              @ args
-              @ [ "&&"; "git"; "push"; "-u" ]) )
+          let l =
+            "git commit"
+            ^ List.fold_left (fun acc a -> acc ^ " " ^ a) "" args
+            ^ " && git push -u"
+          in
+          ("", Array.of_list ([ "bash"; "-c" ] @ [ l ]))
       | c ->
           let cmd = c |> command_to_str in
           ("", Array.of_list (("git" :: [ cmd ]) @ args))
