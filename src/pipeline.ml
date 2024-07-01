@@ -68,7 +68,7 @@ let v ~repo () =
     let* _ =
       Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
     in
-    let* _ = Current_gitfile.add ~label:"new outputs" [ "." ] in
+    let* _ = Current_gitfile.add ~label:"new outputs" [ "-A" ] in
     let* _ = Current_gitfile.status ~label:"st1" () in
     let* _ =
       Current_gitfile.commit ~label:"new outputs" [ "--all"; "-m"; "test" ]
