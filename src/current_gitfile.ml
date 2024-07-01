@@ -237,10 +237,50 @@ module Raw = struct
       in
       Lwt.return (Ok v)
   end
+
+  module Git_commands = struct
+    type t = No_context
+
+    let id = "git-commands"
+
+    let command_to_str cmd =
+      match cmd with `Commit -> "commit" | `Push -> "push" | `Add -> "add"
+
+    let git_cmd cmd args =
+      let cmd = cmd |> command_to_str in
+      ("", Array.of_list (("git" :: [ cmd ]) @ args))
+
+    module Key = struct
+      type t = { command : [ `Commit | `Push | `Add ]; args : string list }
+
+      let to_json { command; args } =
+        `Assoc
+          [
+            ("command", `String (command |> command_to_str));
+            ("args", [%derive.to_yojson: string list] args);
+          ]
+
+      let digest t = t |> to_json |> Yojson.Safe.to_string
+      let pp f t = Yojson.Safe.pretty_print f (to_json t)
+    end
+
+    module Value = Current.Unit
+
+    let build No_context (job : Current.Job.t) (k : Key.t) :
+        Value.t Current.or_error Lwt.t =
+      let { Key.command; args } = k in
+      Current.Job.start ~level:Dangerous job >>= fun () ->
+      let cmd = git_cmd command args in
+      Current.Process.exec ~cancellable:true ~job cmd
+
+    let pp = Key.pp
+    let auto_cancel = true
+  end
 end
 
 module GitFileC = Current_cache.Make (Raw.Git_file)
 module GitDirC = Current_cache.Make (Raw.Git_dir_contents)
+module GitCmds = Current_cache.Make (Raw.Git_commands)
 
 let raw_git_file ?schedule commit files =
   let key = Raw.Git_file.Key.{ commit; files } in
@@ -261,6 +301,27 @@ let directory_contents_hashes ?schedule commit directory ~label =
   Current.component "read %a" Fmt.(string) label
   |> let> commit = commit in
      raw_git_dir ?schedule commit directory
+
+let commit ?schedule ~label args =
+  let open Current.Syntax in
+  Current.component "git: commit %a" Fmt.(string) label
+  |>
+  let> _ = () |> Current.return in
+  GitCmds.get ?schedule No_context { command = `Commit; args }
+
+let push ?schedule ~label args =
+  let open Current.Syntax in
+  Current.component "git: push %a" Fmt.(string) label
+  |>
+  let> _ = () |> Current.return in
+  GitCmds.get ?schedule No_context { command = `Push; args }
+
+let add ?schedule ~label args =
+  let open Current.Syntax in
+  Current.component "git: add %a" Fmt.(string) label
+  |>
+  let> _ = () |> Current.return in
+  GitCmds.get ?schedule No_context { command = `Add; args }
 
 module GitDirectoryC = Current_cache.Make (Raw.Git_dir)
 

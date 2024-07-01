@@ -12,4 +12,7 @@
    cmdliner
    lwt
    lwt.unix
-   prometheus-app.unix))
+   ppx_deriving_yojson.runtime
+   prometheus-app.unix)
+ (preprocess
+  (pps ppx_deriving.std ppx_deriving_yojson)))
