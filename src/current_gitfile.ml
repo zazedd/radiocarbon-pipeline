@@ -244,14 +244,21 @@ module Raw = struct
     let id = "git-commands"
 
     let command_to_str cmd =
-      match cmd with `Commit -> "commit" | `Push -> "push" | `Add -> "add"
+      match cmd with
+      | `Commit -> "commit"
+      | `Push -> "push"
+      | `Add -> "add"
+      | `Status -> "status"
 
     let git_cmd cmd args =
       let cmd = cmd |> command_to_str in
       ("", Array.of_list (("git" :: [ cmd ]) @ args))
 
     module Key = struct
-      type t = { command : [ `Commit | `Push | `Add ]; args : string list }
+      type t = {
+        command : [ `Commit | `Push | `Add | `Status ];
+        args : string list;
+      }
 
       let to_json { command; args } =
         `Assoc
@@ -322,6 +329,13 @@ let add ?schedule ~label args =
   |>
   let> _ = () |> Current.return in
   GitCmds.get ?schedule No_context { command = `Add; args }
+
+let status ?schedule ~label () =
+  let open Current.Syntax in
+  Current.component "git: status %a" Fmt.(string) label
+  |>
+  let> _ = () |> Current.return in
+  GitCmds.get ?schedule No_context { command = `Status; args = [] }
 
 module GitDirectoryC = Current_cache.Make (Raw.Git_dir)
 
