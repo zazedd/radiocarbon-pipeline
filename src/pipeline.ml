@@ -1,5 +1,6 @@
 open Current.Syntax
 module Git = Current_git
+module Github = Current_github
 module Nix = Current_nix.Default
 
 let pp_sp_label = Fmt.(option (sp ++ string))
@@ -83,6 +84,13 @@ let v ~repo () =
    The inputs are fixed, we should watch over the repository, specifically the inputs/ directory
    and check if there are new/modified files. If so, we should run them through our script.
    DONE!
+
+   HACK: 
+   Marshaling the last commit to a file. We should try to use the cache:
+   Key: filename
+   Value: hash of the file
+   While getting, if the filehash isnt there it will get built. If the hash of the file does not match the
+   new one we should invalidate that entry and create a new one.
 
    TODO: 2
    The outputs currently stay inside the temporary folder, we should remove and place them inside
