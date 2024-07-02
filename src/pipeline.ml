@@ -83,17 +83,22 @@ let v ~repo () =
   let src = Git.Local.head_commit repo in
   let filepath = Fpath.v "inputs/test" in
   let* _ = src in
-  let file = Bos.OS.File.read filepath |> Result.get_ok |> Current.return in
-  let* f = file in
+  let contents = Bos.OS.File.read filepath |> Result.get_ok |> Current.return in
+  let* contents = contents in
   let* new_hash =
-    Digestif.SHA512.digest_string f |> Digestif.SHA512.to_hex |> Current.return
+    Digestif.SHA512.digest_string contents
+    |> Digestif.SHA512.to_hex |> Current.return
   in
-  let n =
+  let new_hash_value =
     Current_gitfile.Raw.Test.Value.{ digest = new_hash } |> Current.return
   in
-  let+ fn = Current_gitfile.grab_hash src n "inputs/test" in
-  Format.printf "file: %s@." f;
-  match fn with Some file -> Format.printf "CHANGED! %s@." file | None -> ()
+  let+ new_or_changed_file =
+    Current_gitfile.grab_hash src new_hash_value "inputs/test"
+  in
+  Format.printf "file: %s@." contents;
+  match new_or_changed_file with
+  | Some file -> Format.printf "CHANGED! %s@." file
+  | None -> ()
 
 (* let script_runs = generate_script_args files in *)
 (* if List.length script_runs = 0 then () |> Current.return *)
