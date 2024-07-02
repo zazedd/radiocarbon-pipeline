@@ -87,9 +87,9 @@ let v ~repo () =
     |> Digestif.SHA512.to_hex |> Current.return
   in
   let+ Current_gitfile.Raw.Test.Value.{ digest } =
-    Current_gitfile.TestC.invalidate { filename = "inputs/denmark.csv" };
     Current_gitfile.grab_hash hash "inputs/denmark.csv"
   and+ _ = src in
+  Current_gitfile.TestC.invalidate { filename = "inputs/denmark.csv" };
   Format.printf "%s@." digest
 
 (* let script_runs = generate_script_args files in *)
