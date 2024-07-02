@@ -82,6 +82,7 @@ let generate_script_args c =
 let v ~repo () =
   let src = Git.Local.head_commit repo in
   let file = Bos.OS.File.read (Fpath.v "inputs/denmark.csv") |> Result.get_ok in
+  Format.printf "file: %s@." file;
   let new_hash = Digestif.SHA512.digest_string file |> Digestif.SHA512.to_hex in
   let hash = new_hash |> Current.return in
   let+ Current_gitfile.Raw.Test.Value.{ digest } =
