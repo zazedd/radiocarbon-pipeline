@@ -415,29 +415,27 @@ let digest_file path =
       Digestif.SHA256.digest_string content |> Digestif.SHA256.to_hex)
     (fun () -> Lwt_io.close file)
 
-let grab_hash ?schedule commit new_hash filename =
+let x ?schedule commit filename : Raw.Test.Value.t Current.t =
+  let open Current.Syntax in
+  let k = Raw.Test.Key.{ filename } in
+  Current.component "compare hashes %a" Fmt.string filename
+  |> let> commit = commit in
+     TestC.get ?schedule { commit } k
+
+let grab_hash commit new_hash filename =
   let open Current.Syntax in
   Logs.info (fun f -> f "starting grabhash@.");
   let k = Raw.Test.Key.{ filename } in
-  let des = Current.component "grab old hash %a" Fmt.string filename in
-  Current.component "compare hashes %a" Fmt.string filename
-  |> let> commit = commit in
-     Logs.info (fun f -> f "grabbing old@.");
-     let old = TestC.get ?schedule { commit } k in
-     let are_different = ref false in
-     let _ =
-       let+ old_hash =
-         Current.primitive ~info:des (fun _ -> old) (() |> Current.return)
-       and+ new_hash = new_hash in
-       if old_hash <> new_hash then are_different := true
-     in
-     if !are_different then (
-       TestC.invalidate k;
-       TestC.get ?schedule { commit } k |> ignore;
-       Some filename |> Current.Primitive.const)
-     else (
-       TestC.get ?schedule { commit } k |> ignore;
-       None |> Current.Primitive.const)
+  Logs.info (fun f -> f "grabbing old@.");
+  let old = x commit filename in
+  let+ old_hash = old and+ new_hash = new_hash in
+  if old_hash <> new_hash then (
+    TestC.invalidate k;
+    x commit filename |> ignore;
+    Some filename)
+  else (
+    x commit filename |> ignore;
+    None)
 
 (* let grab_hash ?schedule commit filename = *)
 (*   let label = "grab_hash" in *)
