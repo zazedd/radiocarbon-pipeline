@@ -239,7 +239,7 @@ module Raw = struct
   end
 
   module Test = struct
-    type t = { new_hash : string }
+    type t = { commit : Git.Commit.t }
 
     let auto_cancel = true
     let id = "git-hashes"
@@ -271,18 +271,19 @@ module Raw = struct
       Lwt.finalize
         (fun () ->
           Lwt_io.read file >|= fun content ->
-          Digestif.SHA256.digest_string content |> Digestif.SHA256.to_hex)
+          Digestif.SHA512.digest_string content |> Digestif.SHA512.to_hex)
         (fun () -> Lwt_io.close file)
 
-    let mv ~cancellable ~job ~src ~dst =
-      let cmd = [| "mv"; Fpath.to_string src; Fpath.to_string dst |] in
-      Current.Process.exec ~cancellable ~job ("", cmd)
+    let or_raise = function Ok v -> v | Error (`Msg m) -> failwith m
 
-    let build { new_hash } (job : Current.Job.t) (_k : Key.t) :
+    let build { commit } (job : Current.Job.t) (k : Key.t) :
         Value.t Current.or_error Lwt.t =
+      let filepath = Fpath.v k.filename in
       Current.Job.start ~level:Harmless job >>= fun () ->
-      let res = Value.{ digest = new_hash } in
-      Lwt.return (Ok res)
+      Format.printf "%s@." (Git.Commit.hash commit);
+      Current_git.with_checkout ~job commit @@ fun dir ->
+      digest_file Fpath.(dir // filepath) >>= fun new_hash ->
+      Lwt.return (Ok Value.{ digest = new_hash })
   end
 
   module Git_commands = struct
@@ -408,21 +409,25 @@ let directory ?schedule commit dir =
 
 module TestC = Current_cache.Make (Raw.Test)
 
-let grab_hash ?schedule new_hash filename =
+let digest_file path =
+  Lwt_io.(open_file ~mode:Input (Fpath.to_string path)) >>= fun file ->
+  Lwt.finalize
+    (fun () ->
+      Lwt_io.read file >|= fun content ->
+      Digestif.SHA256.digest_string content |> Digestif.SHA256.to_hex)
+    (fun () -> Lwt_io.close file)
+
+let grab_hash ?schedule commit new_hash filename =
+  let open Current.Syntax in
   Logs.info (fun f -> f "starting grabhash@.");
   let k = Raw.Test.Key.{ filename } in
-  let des = Current.component "grab hash for %a" Fmt.string filename in
-  Current.primitive ~info:des
-    (fun new_hash ->
-      let old_hash = TestC.get ?schedule { new_hash } k in
-      let new_hash_primitive =
-        Current.Primitive.const Raw.Test.Value.{ digest = new_hash }
-      in
-      if old_hash = new_hash_primitive then (
-        Logs.info (fun f -> f "same hash@.");
-        new_hash_primitive)
-      else (
-        Logs.info (fun f -> f "cache invalidated, new hash@.");
-        TestC.invalidate k;
-        TestC.get ?schedule { new_hash } k))
-    new_hash
+  let des = Current.component "grab old hash %a" Fmt.string filename in
+  Current.component "compare hashes %a" Fmt.string filename
+  |> let> commit = commit in
+     Logs.info (fun f -> f "grabbing old@.");
+     let old = TestC.get ?schedule { commit } k in
+     let old_hash =
+       Current.primitive ~info:des (fun _ -> old) (() |> Current.return)
+     in
+     if old_hash <> new_hash then TestC.invalidate k;
+     TestC.get ?schedule { commit } k
