@@ -9,40 +9,40 @@ let pull = false
 let output_folder = Fpath.v "outputs/"
 let file_name f = Fpath.rem_prefix (Fpath.parent f) f |> Option.get
 
-let output_file_name f =
-  let output_file =
-    f |> Fpath.v |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
-    |> Fpath.add_ext "csv"
-  in
-  Fpath.(output_folder // output_file) |> Fpath.to_string
+(* let output_file_name f = *)
+(*   let output_file = *)
+(*     f |> Fpath.v |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out" *)
+(*     |> Fpath.add_ext "csv" *)
+(*   in *)
+(*   Fpath.(output_folder // output_file) |> Fpath.to_string *)
 
-let new_and_changed_files curr last =
-  List.fold_left
-    (fun acc (path1, hash1) ->
-      let file =
-        List.find_opt (fun (path2, _) -> file_name path1 = file_name path2) last
-      in
-      match file with
-      | None -> path1 :: acc
-      | Some (_, hash2) -> if hash1 <> hash2 then path1 :: acc else acc)
-    [] curr
-  |> List.map (fun a ->
-         let name = Fpath.base a in
-         let folder = Fpath.v "inputs" in
-         Fpath.(folder // name) |> Fpath.to_string)
+(* let new_and_changed_files curr last = *)
+(*   List.fold_left *)
+(*     (fun acc (path1, hash1) -> *)
+(*       let file = *)
+(*         List.find_opt (fun (path2, _) -> file_name path1 = file_name path2) last *)
+(*       in *)
+(*       match file with *)
+(*       | None -> path1 :: acc *)
+(*       | Some (_, hash2) -> if hash1 <> hash2 then path1 :: acc else acc) *)
+(*     [] curr *)
+(*   |> List.map (fun a -> *)
+(*          let name = Fpath.base a in *)
+(*          let folder = Fpath.v "inputs" in *)
+(*          Fpath.(folder // name) |> Fpath.to_string) *)
 
-let generate_script_args c =
-  List.map
-    (fun file ->
-      [
-        "Rscript";
-        "scripts/script.r";
-        file;
-        output_file_name file;
-        "Site";
-        "Aussois";
-      ])
-    c
+(* let generate_script_args c = *)
+(*   List.map *)
+(*     (fun file -> *)
+(*       [ *)
+(*         "Rscript"; *)
+(*         "scripts/script.r"; *)
+(*         file; *)
+(*         output_file_name file; *)
+(*         "Site"; *)
+(*         "Aussois"; *)
+(*       ]) *)
+(*     c *)
 
 (* let v ~repo () = *)
 (*   let src = Git.Local.head_commit repo in *)
@@ -79,26 +79,44 @@ let generate_script_args c =
 (*     in *)
 (*     Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ] *)
 
+let new_and_changed_files src inputs =
+  List.map
+    (fun file ->
+      let content = Bos.OS.File.read file |> Result.get_ok in
+      let digest =
+        content |> Digestif.SHA512.digest_string |> Digestif.SHA512.to_hex
+      in
+      let k = Current_gitfile.Raw.Test.Value.{ digest } |> Current.return in
+      Current_gitfile.grab_hash src k (file |> Fpath.to_string))
+    inputs
+
 let v ~repo () =
   let src = Git.Local.head_commit repo in
-  let filepath = Fpath.v "inputs/test" in
+  let in_path = Fpath.v "inputs/" in
   let* _ = src in
-  let contents = Bos.OS.File.read filepath |> Result.get_ok |> Current.return in
-  let* contents = contents in
-  let* new_hash =
-    Digestif.SHA512.digest_string contents
-    |> Digestif.SHA512.to_hex |> Current.return
-  in
-  let new_hash_value =
-    Current_gitfile.Raw.Test.Value.{ digest = new_hash } |> Current.return
-  in
-  let+ new_or_changed_file =
-    Current_gitfile.grab_hash src new_hash_value "inputs/test"
-  in
-  Format.printf "file: %s@." contents;
-  match new_or_changed_file with
-  | Some file -> Format.printf "CHANGED! %s@." file
-  | None -> ()
+  let inputs = Bos.OS.Dir.contents in_path |> Result.get_ok in
+  let+ n_c_files = inputs |> new_and_changed_files src |> Current.list_seq in
+  List.iter
+    (fun f ->
+      let x = match f with Some s -> "file:" ^ s | None -> "none" in
+      Format.printf "%s@." x)
+    n_c_files
+
+(* let* contents = contents in *)
+(* let* new_hash = *)
+(*   Digestif.SHA512.digest_string contents *)
+(*   |> Digestif.SHA512.to_hex |> Current.return *)
+(* in *)
+(* let new_hash_value = *)
+(*   Current_gitfile.Raw.Test.Value.{ digest = new_hash } |> Current.return *)
+(* in *)
+(* let+ new_or_changed_file = *)
+(*   Current_gitfile.grab_hash src new_hash_value "inputs/test" *)
+(* in *)
+(* Format.printf "file: %s@." contents; *)
+(* match new_or_changed_file with *)
+(* | Some file -> Format.printf "CHANGED! %s@." file *)
+(* | None -> () *)
 
 (* let script_runs = generate_script_args files in *)
 (* if List.length script_runs = 0 then () |> Current.return *)

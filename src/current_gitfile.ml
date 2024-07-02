@@ -407,15 +407,7 @@ let directory ?schedule commit dir =
 
 module TestC = Current_cache.Make (Raw.Test)
 
-let digest_file path =
-  Lwt_io.(open_file ~mode:Input (Fpath.to_string path)) >>= fun file ->
-  Lwt.finalize
-    (fun () ->
-      Lwt_io.read file >|= fun content ->
-      Digestif.SHA256.digest_string content |> Digestif.SHA256.to_hex)
-    (fun () -> Lwt_io.close file)
-
-let x ?schedule commit filename : Raw.Test.Value.t Current.t =
+let call_cache ?schedule commit filename : Raw.Test.Value.t Current.t =
   let open Current.Syntax in
   let k = Raw.Test.Key.{ filename } in
   Current.component "compare hashes %a" Fmt.string filename
@@ -427,49 +419,12 @@ let grab_hash commit new_hash filename =
   Logs.info (fun f -> f "starting grabhash@.");
   let k = Raw.Test.Key.{ filename } in
   Logs.info (fun f -> f "grabbing old@.");
-  let old = x commit filename in
+  let old = call_cache commit filename in
   let+ old_hash = old and+ new_hash = new_hash in
   if old_hash <> new_hash then (
     TestC.invalidate k;
-    x commit filename |> ignore;
+    call_cache commit filename |> ignore;
     Some filename)
   else (
-    x commit filename |> ignore;
+    call_cache commit filename |> ignore;
     None)
-
-(* let grab_hash ?schedule commit filename = *)
-(*   let label = "grab_hash" in *)
-(*   let switch = Current.Switch.create ~label () in *)
-(*   let config = Current.Config.v () in *)
-(*   let job = Current.Job.create ~priority:`High ~switch ~label ~config () in *)
-(*   let open Current.Syntax in *)
-(*   Logs.info (fun f -> f "starting grabhash@."); *)
-(*   let k = Raw.Test.Key.{ filename } in *)
-(*   let des = Current.component "grab old hash %a" Fmt.string filename in *)
-(*   Current.component "compare hashes %a" Fmt.string filename *)
-(*   |> let> commit = commit in *)
-(*      Logs.info (fun f -> f "grabbing old@."); *)
-(*      let test = *)
-(*        Current.Job.start ~level:Harmless job >>= fun () -> *)
-(*        Current_git.with_checkout ~job commit @@ fun dir -> *)
-(*        let filepath = Fpath.v filename in *)
-(*        let new_hash = *)
-(*          Bos.OS.File.read Fpath.(dir // filepath) *)
-(*          |> Result.get_ok |> Digestif.SHA512.digest_string *)
-(*          |> Digestif.SHA512.to_hex *)
-(*        in *)
-(*        let new_hash = Raw.Test.Value.{ digest = new_hash } |> Current.return in *)
-(*        let old = TestC.get ?schedule { commit } k in *)
-(*        let old_hash = *)
-(*          Current.primitive ~info:des (fun _ -> old) (() |> Current.return) *)
-(*        in *)
-(*        if old_hash <> new_hash then ( *)
-(*          Logs.info (fun f -> f "Different hash! Invalidating@."); *)
-(*          TestC.invalidate k); *)
-(*        Lwt.return (Ok (TestC.get ?schedule { commit } k)) *)
-(*      in *)
-(*      Lwt.state test |> fun a -> *)
-(*      match a with *)
-(*      | Return v -> v |> or_raise *)
-(*      | Fail ex -> raise ex *)
-(*      | Sleep -> failwith "sleeping" *)
