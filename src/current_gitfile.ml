@@ -408,18 +408,19 @@ let directory ?schedule commit dir =
 module TestC = Current_cache.Make (Raw.Test)
 
 let grab_hash ?schedule new_hash filename =
-  let open Current.Syntax in
   let k = Raw.Test.Key.{ filename } in
-  Current.component "grab hash for %a" Fmt.string filename
-  |> let> _ = () |> Current.return in
-     let old_hash = TestC.get ?schedule { new_hash } k in
-     let new_hash_primitive =
-       Current.Primitive.const Raw.Test.Value.{ digest = new_hash }
-     in
-     if old_hash = new_hash_primitive then (
-       Logs.info (fun f -> f "same hash");
-       new_hash_primitive)
-     else (
-       Logs.info (fun f -> f "cache invalidated, new hash");
-       TestC.invalidate k;
-       TestC.get ?schedule { new_hash } k)
+  let des = Current.component "grab hash for %a" Fmt.string filename in
+  Current.primitive ~info:des
+    (fun new_hash ->
+      let old_hash = TestC.get ?schedule { new_hash } k in
+      let new_hash_primitive =
+        Current.Primitive.const Raw.Test.Value.{ digest = new_hash }
+      in
+      if old_hash = new_hash_primitive then (
+        Logs.info (fun f -> f "same hash");
+        new_hash_primitive)
+      else (
+        Logs.info (fun f -> f "cache invalidated, new hash");
+        TestC.invalidate k;
+        TestC.get ?schedule { new_hash } k))
+    new_hash
