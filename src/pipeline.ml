@@ -82,16 +82,20 @@ let generate_script_args c =
 let v ~repo () =
   let src = Git.Local.head_commit repo in
   let* _ = src
-  and* new_hash =
-    Digestif.SHA512.digest_string
-      (Bos.OS.File.read (Fpath.v "inputs/denmark.csv") |> Result.get_ok)
+  and* file =
+    Bos.OS.File.read (Fpath.v "inputs/test") |> Result.get_ok |> Current.return
+  in
+  let* new_hash =
+    Digestif.SHA512.digest_string file
     |> Digestif.SHA512.to_hex |> Current.return
   in
-  let+ Current_gitfile.Raw.Test.Value.{ digest } =
-    Current_gitfile.grab_hash src
-      (Current_gitfile.Raw.Test.Value.{ digest = new_hash } |> Current.return)
-      "inputs/denmark.csv"
+  let n =
+    Current_gitfile.Raw.Test.Value.{ digest = new_hash } |> Current.return
   in
+  let+ Current_gitfile.Raw.Test.Value.{ digest } =
+    Current_gitfile.grab_hash src n "inputs/test"
+  in
+  Format.printf "file: %s@." file;
   Format.printf "old: %s@." digest;
   Format.printf "new: %s@." new_hash
 
