@@ -428,6 +428,12 @@ let grab_hash ?schedule commit new_hash filename =
        Current.primitive ~info:des (fun _ -> old) (() |> Current.return)
      in
      if old_hash <> new_hash then (
+       let _ =
+         let+ { digest = old_hash } = old_hash
+         and+ { digest = new_hash } = new_hash in
+         Format.printf "cache old: %s@." old_hash;
+         Format.printf "cache new: %s@." new_hash
+       in
        Logs.info (fun f -> f "Different hash! Invalidating@.");
        TestC.invalidate k);
      TestC.get ?schedule { commit } k
