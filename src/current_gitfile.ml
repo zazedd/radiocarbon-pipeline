@@ -424,19 +424,20 @@ let grab_hash ?schedule commit new_hash filename =
   |> let> commit = commit in
      Logs.info (fun f -> f "grabbing old@.");
      let old = TestC.get ?schedule { commit } k in
-     let old_hash =
-       Current.primitive ~info:des (fun _ -> old) (() |> Current.return)
+     let are_different = ref false in
+     let _ =
+       let+ old_hash =
+         Current.primitive ~info:des (fun _ -> old) (() |> Current.return)
+       and+ new_hash = new_hash in
+       if old_hash <> new_hash then are_different := true
      in
-     if old_hash <> new_hash then (
-       let _ =
-         let+ { digest = old_hash } = old_hash
-         and+ { digest = new_hash } = new_hash in
-         Format.printf "cache old: %s@." old_hash;
-         Format.printf "cache new: %s@." new_hash
-       in
-       Logs.info (fun f -> f "Different hash! Invalidating@.");
-       TestC.invalidate k);
-     TestC.get ?schedule { commit } k
+     if !are_different then (
+       TestC.invalidate k;
+       TestC.get ?schedule { commit } k |> ignore;
+       Some filename |> Current.Primitive.const)
+     else (
+       TestC.get ?schedule { commit } k |> ignore;
+       None |> Current.Primitive.const)
 
 (* let grab_hash ?schedule commit filename = *)
 (*   let label = "grab_hash" in *)

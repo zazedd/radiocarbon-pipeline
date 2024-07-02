@@ -91,12 +91,9 @@ let v ~repo () =
   let n =
     Current_gitfile.Raw.Test.Value.{ digest = new_hash } |> Current.return
   in
-  let+ Current_gitfile.Raw.Test.Value.{ digest } =
-    Current_gitfile.grab_hash src n "inputs/test"
-  in
+  let+ fn = Current_gitfile.grab_hash src n "inputs/test" in
   Format.printf "file: %s@." f;
-  Format.printf "old: %s@." digest;
-  Format.printf "new: %s@." new_hash
+  match fn with Some file -> Format.printf "CHANGED! %s@." file | None -> ()
 
 (* let script_runs = generate_script_args files in *)
 (* if List.length script_runs = 0 then () |> Current.return *)
