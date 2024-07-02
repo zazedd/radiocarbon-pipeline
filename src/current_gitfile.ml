@@ -331,7 +331,7 @@ module Raw = struct
 
     let build No_context (job : Current.Job.t) (k : Key.t) :
         Value.t Current.or_error Lwt.t =
-      Logs.info (fun f -> f "building cache");
+      Logs.info (fun f -> f "building cache@.");
       let { Key.command; args } = k in
       Current.Job.start ~level:Dangerous job >>= fun () ->
       let cmd = git_cmd command args in
@@ -409,7 +409,7 @@ let directory ?schedule commit dir =
 module TestC = Current_cache.Make (Raw.Test)
 
 let grab_hash ?schedule new_hash filename =
-  Logs.info (fun f -> f "starting grabhash");
+  Logs.info (fun f -> f "starting grabhash@.");
   let k = Raw.Test.Key.{ filename } in
   let des = Current.component "grab hash for %a" Fmt.string filename in
   Current.primitive ~info:des
@@ -419,10 +419,10 @@ let grab_hash ?schedule new_hash filename =
         Current.Primitive.const Raw.Test.Value.{ digest = new_hash }
       in
       if old_hash = new_hash_primitive then (
-        Logs.info (fun f -> f "same hash");
+        Logs.info (fun f -> f "same hash@.");
         new_hash_primitive)
       else (
-        Logs.info (fun f -> f "cache invalidated, new hash");
+        Logs.info (fun f -> f "cache invalidated, new hash@.");
         TestC.invalidate k;
         TestC.get ?schedule { new_hash } k))
     new_hash
