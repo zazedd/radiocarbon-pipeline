@@ -429,5 +429,7 @@ let grab_hash ?schedule commit new_hash filename =
      let old_hash =
        Current.primitive ~info:des (fun _ -> old) (() |> Current.return)
      in
-     if old_hash <> new_hash then TestC.invalidate k;
+     if old_hash <> new_hash then (
+       Logs.info (fun f -> f "Different hash! Invalidating@.");
+       TestC.invalidate k);
      TestC.get ?schedule { commit } k
