@@ -44,40 +44,60 @@ let generate_script_args c =
       ])
     c
 
+(* let v ~repo () = *)
+(*   let src = Git.Local.head_commit repo in *)
+(*   let commit_path = Fpath.v ".commit" in *)
+(*   Current.component "grab previous commit%a" pp_sp_label None *)
+(*   |> *)
+(*   let** current_commit = src in *)
+(*   let last = *)
+(*     Bos.OS.File.read commit_path *)
+(*     |> Result.value ~default:(Git.Commit.marshal current_commit) *)
+(*     |> Git.Commit.unmarshal |> Current.return *)
+(*   in *)
+(*   Current.component "grab new/changed files%a" pp_sp_label None *)
+(*   |> *)
+(*   let** last_dir = *)
+(*     Current_gitfile.directory_contents_hashes last (Fpath.v "inputs") *)
+(*       ~label:"previous" *)
+(*   and* current_dir = *)
+(*     Current_gitfile.directory_contents_hashes src (Fpath.v "inputs") *)
+(*       ~label:"current" *)
+(*   in *)
+(*   let files = new_and_changed_files current_dir last_dir in *)
+(*   let script_runs = generate_script_args files in *)
+(*   let output_files = List.map output_file_name files in *)
+(*   Bos.OS.File.write commit_path (Git.Commit.marshal current_commit) *)
+(*   |> Result.value ~default:(); *)
+(*   if List.length script_runs = 0 then () |> Current.return *)
+(*   else *)
+(*     let* _ = *)
+(*       Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script" *)
+(*     in *)
+(*     let* _ = *)
+(*       Current_gitfile.add ~label:"new outputs" (".commit" :: output_files) *)
+(*     in *)
+(*     Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ] *)
+
 let v ~repo () =
   let src = Git.Local.head_commit repo in
-  let commit_path = Fpath.v ".commit" in
-  Current.component "grab previous commit%a" pp_sp_label None
-  |>
-  let** current_commit = src in
-  let last =
-    Bos.OS.File.read commit_path
-    |> Result.value ~default:(Git.Commit.marshal current_commit)
-    |> Git.Commit.unmarshal |> Current.return
-  in
-  Current.component "grab new/changed files%a" pp_sp_label None
-  |>
-  let** last_dir =
-    Current_gitfile.directory_contents_hashes last (Fpath.v "inputs")
-      ~label:"previous"
-  and* current_dir =
-    Current_gitfile.directory_contents_hashes src (Fpath.v "inputs")
-      ~label:"current"
-  in
-  let files = new_and_changed_files current_dir last_dir in
-  let script_runs = generate_script_args files in
-  let output_files = List.map output_file_name files in
-  Bos.OS.File.write commit_path (Git.Commit.marshal current_commit)
-  |> Result.value ~default:();
-  if List.length script_runs = 0 then () |> Current.return
-  else
-    let* _ =
-      Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
-    in
-    let* _ =
-      Current_gitfile.add ~label:"new outputs" (".commit" :: output_files)
-    in
-    Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ]
+  let file = Bos.OS.File.read (Fpath.v "inputs/denmark.csv") |> Result.get_ok in
+  let hash = Digestif.SHA512.digest_string file |> Digestif.SHA512.to_hex in
+  let+ Current_gitfile.Raw.Test.Value.{ digest } =
+    Current_gitfile.grab_hash hash "inputs/denmark.csv"
+  and+ _ = src in
+  Format.printf "%s@." digest
+
+(* let script_runs = generate_script_args files in *)
+(* if List.length script_runs = 0 then () |> Current.return *)
+(* else *)
+(*   let* _ = *)
+(*     Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script" *)
+(*   in *)
+(*   let* _ = *)
+(*     Current_gitfile.add ~label:"new outputs" (".commit" :: output_files) *)
+(*   in *)
+(*   Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ] *)
 
 (*
    TODO: 1

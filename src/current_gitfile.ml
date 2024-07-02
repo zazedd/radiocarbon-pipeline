@@ -238,6 +238,53 @@ module Raw = struct
       Lwt.return (Ok v)
   end
 
+  module Test = struct
+    type t = { new_hash : string }
+
+    let auto_cancel = true
+    let id = "git-hashes"
+
+    module Key = struct
+      type t = { filename : string }
+
+      let to_json t = `Assoc [ ("filename", `String t.filename) ]
+      let digest t = to_json t |> Yojson.Safe.to_string
+    end
+
+    let pp ppf t = Yojson.pp ppf (Key.to_json t)
+
+    module Value = struct
+      type t = { digest : string }
+
+      let marshal t =
+        let json = `Assoc [ ("digest", `String t.digest) ] in
+        Yojson.to_string json
+
+      let unmarshal s =
+        match Yojson.Safe.from_string s with
+        | `Assoc [ ("digest", `String digest) ] -> { digest }
+        | _ -> failwith "Failed to unmarshal files"
+    end
+
+    let digest_file path =
+      Lwt_io.(open_file ~mode:Input (Fpath.to_string path)) >>= fun file ->
+      Lwt.finalize
+        (fun () ->
+          Lwt_io.read file >|= fun content ->
+          Digestif.SHA256.digest_string content |> Digestif.SHA256.to_hex)
+        (fun () -> Lwt_io.close file)
+
+    let mv ~cancellable ~job ~src ~dst =
+      let cmd = [| "mv"; Fpath.to_string src; Fpath.to_string dst |] in
+      Current.Process.exec ~cancellable ~job ("", cmd)
+
+    let build { new_hash } (job : Current.Job.t) (_k : Key.t) :
+        Value.t Current.or_error Lwt.t =
+      Current.Job.start ~level:Harmless job >>= fun () ->
+      let res = Value.{ digest = new_hash } in
+      Lwt.return (Ok res)
+  end
+
   module Git_commands = struct
     type t = No_context
 
@@ -357,3 +404,22 @@ let directory ?schedule commit dir =
   Current.component "directory %a" Fpath.pp dir
   |> let> commit = commit in
      raw_git_dir ?schedule commit dir
+
+module TestC = Current_cache.Make (Raw.Test)
+
+let grab_hash ?schedule new_hash filename =
+  let open Current.Syntax in
+  let k = Raw.Test.Key.{ filename } in
+  Current.component "grab hash for %a" Fmt.string filename
+  |> let> _ = () |> Current.return in
+     let old_hash = TestC.get ?schedule { new_hash } k in
+     let new_hash_primitive =
+       Current.Primitive.const Raw.Test.Value.{ digest = new_hash }
+     in
+     if old_hash = new_hash_primitive then (
+       Logs.info (fun f -> f "same hash");
+       new_hash_primitive)
+     else (
+       Logs.info (fun f -> f "cache invalidated, new hash");
+       TestC.invalidate k;
+       TestC.get ?schedule { new_hash } k)
