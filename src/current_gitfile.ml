@@ -410,6 +410,7 @@ module TestC = Current_cache.Make (Raw.Test)
 let grab_hash ?schedule new_hash filename =
   let k = Raw.Test.Key.{ filename } in
   let des = Current.component "grab hash for %a" Fmt.string filename in
+  Logs.info (fun f -> f "starting primitive computation");
   Current.primitive ~info:des
     (fun new_hash ->
       let old_hash = TestC.get ?schedule { new_hash } k in
