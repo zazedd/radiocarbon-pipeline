@@ -331,6 +331,7 @@ module Raw = struct
 
     let build No_context (job : Current.Job.t) (k : Key.t) :
         Value.t Current.or_error Lwt.t =
+      Logs.info (fun f -> f "building cache");
       let { Key.command; args } = k in
       Current.Job.start ~level:Dangerous job >>= fun () ->
       let cmd = git_cmd command args in
