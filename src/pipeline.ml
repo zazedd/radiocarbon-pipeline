@@ -33,15 +33,7 @@ let output_file_name f =
 
 let generate_script_args c =
   List.map
-    (fun file ->
-      [
-        "Rscript";
-        "scripts/script.r";
-        file;
-        output_file_name file;
-        "Site";
-        "Aussois";
-      ])
+    (fun file -> [ "Rscript"; "scripts/script.r"; file; output_file_name file ])
     c
 
 (* let v ~repo () = *)
@@ -95,14 +87,25 @@ let v ~repo () =
     Current_gitfile.Raw.Test.Value.{ files = new_hashes in_path }
     |> Current.return
   in
-  let+ n_c_files = Current_gitfile.grab_hashes src v in_path in
+  let* n_c_files = Current_gitfile.grab_hashes src v in_path in
   Format.printf "COMIN THROUGH@.";
   match n_c_files with
   | Some l ->
-      List.map (fun f -> fst f |> Fpath.to_string) l
-      |> generate_script_args
-      |> List.iter (fun sl -> List.iter (Format.printf "%s@.") sl)
-  | _ -> Format.printf "None changed@."
+      Logs.info (fun f -> f "Some inputs have changed.");
+      let files = List.map (fun f -> fst f |> Fpath.to_string) l in
+      let script_runs = files |> generate_script_args in
+      let output_files = List.map output_file_name files in
+      if List.length script_runs = 0 then () |> Current.return
+      else
+        let* _ =
+          Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
+        in
+        (* let* _ = *)
+        Current_gitfile.add ~label:"new outputs" output_files
+      (* in *)
+      (* Current_gitfile.commit_push ~label:"new outputs" *)
+      (*   [ "--all"; "-m"; "test" ] *)
+  | _ -> Logs.info (fun f -> f "No inputs have changed.") |> Current.return
 
 (* let* contents = contents in *)
 (* let* new_hash = *)
