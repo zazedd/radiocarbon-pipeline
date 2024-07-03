@@ -87,8 +87,9 @@ let v ~repo () =
     Current_gitfile.Raw.Test.Value.{ files = new_hashes in_path }
     |> Current.return
   in
+  Format.printf "COMIN THROUGH 1@.";
   let* n_c_files = Current_gitfile.grab_hashes src v in_path in
-  Format.printf "COMIN THROUGH@.";
+  Format.printf "COMIN THROUGH 2@.";
   match n_c_files with
   | Some l ->
       Logs.info (fun f -> f "Some inputs have changed.");
