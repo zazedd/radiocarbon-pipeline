@@ -245,24 +245,45 @@ module Raw = struct
     let id = "git-hashes"
 
     module Key = struct
-      type t = { filename : string }
+      type t = { dir : Fpath.t }
 
-      let to_json t = `Assoc [ ("filename", `String t.filename) ]
+      let to_json t = `Assoc [ ("dir", `String (t.dir |> Fpath.to_string)) ]
       let digest t = to_json t |> Yojson.Safe.to_string
     end
 
     let pp ppf t = Yojson.pp ppf (Key.to_json t)
 
     module Value = struct
-      type t = { digest : string }
+      type t = { files : (Fpath.t * string) list } (* filename * digest *)
 
       let marshal t =
-        let json = `Assoc [ ("digest", `String t.digest) ] in
+        let json =
+          `Assoc
+            [
+              ( "files",
+                `List
+                  (List.map
+                     (fun f ->
+                       let fn = fst f and dg = snd f in
+                       `String (Fpath.to_string fn ^ "&" ^ dg))
+                     t.files) );
+            ]
+        in
         Yojson.to_string json
 
       let unmarshal s =
         match Yojson.Safe.from_string s with
-        | `Assoc [ ("digest", `String digest) ] -> { digest }
+        | `Assoc [ ("files", `List f) ] ->
+            let files =
+              List.map
+                (fun m ->
+                  let m = match m with `String m -> m | _ -> assert false in
+                  match String.split_on_char '&' m with
+                  | [ fn; dg ] -> (Fpath.v fn, dg)
+                  | _ -> assert false)
+                f
+            in
+            { files }
         | _ -> failwith "Failed to unmarshal files"
     end
 
@@ -278,11 +299,16 @@ module Raw = struct
 
     let build { commit } (job : Current.Job.t) (k : Key.t) :
         Value.t Current.or_error Lwt.t =
-      let filepath = Fpath.v k.filename in
       Current.Job.start ~level:Harmless job >>= fun () ->
       Current_git.with_checkout ~job commit @@ fun dir ->
-      digest_file Fpath.(dir // filepath) >>= fun new_hash ->
-      Lwt.return (Ok Value.{ digest = new_hash })
+      let paths = Bos.OS.Dir.contents Fpath.(dir // k.dir) |> Result.get_ok in
+      Current.Job.log job "Directory %a contains %a" Fpath.pp k.dir
+        Fmt.(list Fpath.pp)
+        paths;
+      Lwt_list.map_p
+        (fun path -> digest_file path >|= fun digest -> (path, digest))
+        paths
+      >>= fun l -> Lwt.return (Ok Value.{ files = l })
   end
 
   module Git_commands = struct
@@ -407,24 +433,42 @@ let directory ?schedule commit dir =
 
 module TestC = Current_cache.Make (Raw.Test)
 
-let call_cache ?schedule commit filename : Raw.Test.Value.t Current.t =
+let call_cache ?schedule commit dir : Raw.Test.Value.t Current.t =
   let open Current.Syntax in
-  let k = Raw.Test.Key.{ filename } in
-  Current.component "compare hashes %a" Fmt.string filename
+  let k = Raw.Test.Key.{ dir } in
+  Current.component "grabbing hashes inside %a" Fpath.pp dir
   |> let> commit = commit in
      TestC.get ?schedule { commit } k
 
-let grab_hash commit new_hash filename =
+let grab_hashes commit (new_hash : Raw.Test.Value.t Current.t) dir =
   let open Current.Syntax in
   Logs.info (fun f -> f "starting grabhash@.");
-  let k = Raw.Test.Key.{ filename } in
+  let k = Raw.Test.Key.{ dir } in
   Logs.info (fun f -> f "grabbing old@.");
-  let old = call_cache commit filename in
-  let+ old_hash = old and+ new_hash = new_hash in
-  if old_hash <> new_hash then (
+  let old = call_cache commit dir in
+  let+ old_hashes = old and+ new_hashes = new_hash in
+  (* remove prefixes, /var/folders/.../inputs/... != inputs/... *)
+  let old_hashes =
+    List.map (fun (p, d) -> (Fpath.base p, d)) old_hashes.files
+  in
+  let new_hashes =
+    List.map (fun (p, d) -> (Fpath.base p, d)) new_hashes.files
+  in
+  if old_hashes <> new_hashes then (
+    List.iter
+      (fun (path, hash) ->
+        Format.printf "old: %s -> %s@." (path |> Fpath.to_string) hash)
+      old_hashes;
+    List.iter
+      (fun (path, hash) ->
+        Format.printf "new: %s -> %s@." (path |> Fpath.to_string) hash)
+      new_hashes;
     TestC.invalidate k;
-    call_cache commit filename |> ignore;
-    Some filename)
+    call_cache commit dir |> ignore;
+    let changed_and_new =
+      List.filter (fun file -> List.mem file old_hashes) new_hashes
+    in
+    Some changed_and_new)
   else (
-    call_cache commit filename |> ignore;
+    call_cache commit dir |> ignore;
     None)

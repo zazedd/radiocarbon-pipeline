@@ -79,28 +79,32 @@ let file_name f = Fpath.rem_prefix (Fpath.parent f) f |> Option.get
 (*     in *)
 (*     Current_gitfile.commit_push ~label:"new outputs" [ "--all"; "-m"; "test" ] *)
 
-let new_and_changed_files src inputs =
+let new_hashes in_path =
+  let inputs = Bos.OS.Dir.contents in_path |> Result.get_ok in
   List.map
     (fun file ->
       let content = Bos.OS.File.read file |> Result.get_ok in
-      let digest =
-        content |> Digestif.SHA512.digest_string |> Digestif.SHA512.to_hex
-      in
-      let k = Current_gitfile.Raw.Test.Value.{ digest } |> Current.return in
-      Current_gitfile.grab_hash src k (file |> Fpath.to_string))
+      (file, content |> Digestif.SHA512.digest_string |> Digestif.SHA512.to_hex))
     inputs
 
 let v ~repo () =
   let src = Git.Local.head_commit repo in
   let in_path = Fpath.v "inputs/" in
   let* _ = src in
-  let inputs = Bos.OS.Dir.contents in_path |> Result.get_ok in
-  let+ n_c_files = inputs |> new_and_changed_files src |> Current.list_seq in
-  List.iter
-    (fun f ->
-      let x = match f with Some s -> "file:" ^ s | None -> "none" in
-      Format.printf "%s@." x)
-    n_c_files
+  let v =
+    Current_gitfile.Raw.Test.Value.{ files = new_hashes in_path }
+    |> Current.return
+  in
+  let+ n_c_files = Current_gitfile.grab_hashes src v in_path in
+  (* let+ n_c_files = inputs |> new_and_changed_files src |> Current.list_seq in *)
+  match n_c_files with
+  | Some l ->
+      List.iter
+        (fun f ->
+          let x = match f with s, _ -> "file:" ^ (s |> Fpath.to_string) in
+          Format.printf "%s@." x)
+        l
+  | _ -> Format.printf "None changed@."
 
 (* let* contents = contents in *)
 (* let* new_hash = *)
