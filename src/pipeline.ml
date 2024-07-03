@@ -101,7 +101,7 @@ let v ~repo () =
   | Some l ->
       List.iter
         (fun f ->
-          let x = match f with s, _ -> "file:" ^ (s |> Fpath.to_string) in
+          let x = match f with s, _ -> "file: " ^ (s |> Fpath.to_string) in
           Format.printf "%s@." x)
         l
   | _ -> Format.printf "None changed@."

@@ -466,7 +466,7 @@ let grab_hashes commit (new_hash : Raw.Test.Value.t Current.t) dir =
     TestC.invalidate k;
     call_cache commit dir |> ignore;
     let changed_and_new =
-      List.filter (fun file -> List.mem file old_hashes) new_hashes
+      List.filter (fun file -> List.mem file old_hashes |> not) new_hashes
     in
     Some changed_and_new)
   else (
