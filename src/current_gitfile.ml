@@ -457,6 +457,7 @@ let grab_hashes commit (new_hash : Raw.Test.Value.t Current.t) dir =
   in
   let old_hashes = remove_prefixes old_hashes.files in
   let new_hashes = remove_prefixes new_hashes.files in
+  TestC.invalidate k;
   if old_hashes <> new_hashes then (
     List.iter
       (fun (path, hash) ->
@@ -466,12 +467,8 @@ let grab_hashes commit (new_hash : Raw.Test.Value.t Current.t) dir =
       (fun (path, hash) ->
         Format.printf "new: %s -> %s@." (path |> Fpath.to_string) hash)
       new_hashes;
-    TestC.invalidate k;
-    (* call_cache commit dir |> ignore; *)
     let changed_and_new =
       List.filter (fun file -> List.mem file old_hashes |> not) new_hashes
     in
     Some changed_and_new)
-  else (
-    call_cache commit dir |> ignore;
-    None)
+  else None

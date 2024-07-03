@@ -101,9 +101,9 @@ let v ~repo () =
         let* _ =
           Nix.shell ~args:script_runs ~timeout (`Git src) ~label:"R-script"
         in
-        (* let* _ = *)
-        Current_gitfile.add ~label:"new outputs" output_files
-      (* in *)
+        let* _ = Current_gitfile.add ~label:"new outputs" output_files in
+        let _ = Current_gitfile.grab_hashes src v in_path in
+        () |> Current.return
       (* Current_gitfile.commit_push ~label:"new outputs" *)
       (*   [ "--all"; "-m"; "test" ] *)
   | _ -> Logs.info (fun f -> f "No inputs have changed.") |> Current.return
