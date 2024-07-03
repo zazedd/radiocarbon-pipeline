@@ -9,12 +9,12 @@ let pull = false
 let output_folder = Fpath.v "outputs/"
 let file_name f = Fpath.rem_prefix (Fpath.parent f) f |> Option.get
 
-(* let output_file_name f = *)
-(*   let output_file = *)
-(*     f |> Fpath.v |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out" *)
-(*     |> Fpath.add_ext "csv" *)
-(*   in *)
-(*   Fpath.(output_folder // output_file) |> Fpath.to_string *)
+let output_file_name f =
+  let output_file =
+    f |> Fpath.v |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
+    |> Fpath.add_ext "csv"
+  in
+  Fpath.(output_folder // output_file) |> Fpath.to_string
 
 (* let new_and_changed_files curr last = *)
 (*   List.fold_left *)
@@ -31,18 +31,18 @@ let file_name f = Fpath.rem_prefix (Fpath.parent f) f |> Option.get
 (*          let folder = Fpath.v "inputs" in *)
 (*          Fpath.(folder // name) |> Fpath.to_string) *)
 
-(* let generate_script_args c = *)
-(*   List.map *)
-(*     (fun file -> *)
-(*       [ *)
-(*         "Rscript"; *)
-(*         "scripts/script.r"; *)
-(*         file; *)
-(*         output_file_name file; *)
-(*         "Site"; *)
-(*         "Aussois"; *)
-(*       ]) *)
-(*     c *)
+let generate_script_args c =
+  List.map
+    (fun file ->
+      [
+        "Rscript";
+        "scripts/script.r";
+        file;
+        output_file_name file;
+        "Site";
+        "Aussois";
+      ])
+    c
 
 (* let v ~repo () = *)
 (*   let src = Git.Local.head_commit repo in *)
@@ -96,15 +96,12 @@ let v ~repo () =
     |> Current.return
   in
   let+ n_c_files = Current_gitfile.grab_hashes src v in_path in
-  (* let+ n_c_files = inputs |> new_and_changed_files src |> Current.list_seq in *)
   Format.printf "COMIN THROUGH@.";
   match n_c_files with
   | Some l ->
-      List.iter
-        (fun f ->
-          let x = match f with s, _ -> "file: " ^ (s |> Fpath.to_string) in
-          Format.printf "%s@." x)
-        l
+      List.map (fun f -> fst f |> Fpath.to_string) l
+      |> generate_script_args
+      |> List.iter (fun sl -> List.iter (Format.printf "%s@.") sl)
   | _ -> Format.printf "None changed@."
 
 (* let* contents = contents in *)
