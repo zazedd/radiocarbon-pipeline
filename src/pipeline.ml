@@ -97,6 +97,7 @@ let v ~repo () =
   in
   let+ n_c_files = Current_gitfile.grab_hashes src v in_path in
   (* let+ n_c_files = inputs |> new_and_changed_files src |> Current.list_seq in *)
+  Format.printf "COMIN THROUGH@.";
   match n_c_files with
   | Some l ->
       List.iter

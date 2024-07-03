@@ -448,12 +448,15 @@ let grab_hashes commit (new_hash : Raw.Test.Value.t Current.t) dir =
   let old = call_cache commit dir in
   let+ old_hashes = old and+ new_hashes = new_hash in
   (* remove prefixes, /var/folders/.../inputs/... != inputs/... *)
-  let old_hashes =
-    List.map (fun (p, d) -> (Fpath.base p, d)) old_hashes.files
+  let remove_prefixes fl =
+    List.map
+      (fun (p, d) ->
+        let file = Fpath.base p in
+        (Fpath.(dir // file), d))
+      fl
   in
-  let new_hashes =
-    List.map (fun (p, d) -> (Fpath.base p, d)) new_hashes.files
-  in
+  let old_hashes = remove_prefixes old_hashes.files in
+  let new_hashes = remove_prefixes new_hashes.files in
   if old_hashes <> new_hashes then (
     List.iter
       (fun (path, hash) ->
