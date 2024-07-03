@@ -467,7 +467,7 @@ let grab_hashes commit (new_hash : Raw.Test.Value.t Current.t) dir =
         Format.printf "new: %s -> %s@." (path |> Fpath.to_string) hash)
       new_hashes;
     TestC.invalidate k;
-    call_cache commit dir |> ignore;
+    (* call_cache commit dir |> ignore; *)
     let changed_and_new =
       List.filter (fun file -> List.mem file old_hashes |> not) new_hashes
     in
