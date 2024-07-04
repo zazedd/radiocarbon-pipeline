@@ -1,4 +1,5 @@
 open Lwt.Infix
+module Github = Current_github
 
 let () = Prometheus_unix.Logging.init ()
 let program_name = "example"
@@ -9,15 +10,20 @@ let find_git_root dir =
 
 let main config app mode repo =
   Lwt_main.run
-    ( find_git_root repo >>= fun repo ->
+    ( find_git_root repo >>= fun local ->
+      let get_job_ids ~owner:_ ~name:_ ~hash:_ = [] in
+      let local = Current_git.Local.v (Fpath.v local) in
       let webhook_secret = Current_github.App.webhook_secret app in
-      let repo = Current_git.Local.v (Fpath.v repo) in
-      let engine = Current.Engine.create ~config (Pipeline.v ~repo) in
+      let installation =
+        Github.App.installation app ~account:"zazedd" 52466164 |> Current.return
+      in
+      let engine =
+        Current.Engine.create ~config (Pipeline.v ~local ~installation)
+      in
       let routes =
         Routes.(
           (s "webhooks" / s "github" /? nil)
-          @--> Current_github.webhook ~engine ~get_job_ids:Index.get_job_ids
-                 ~webhook_secret)
+          @--> Current_github.webhook ~engine ~get_job_ids ~webhook_secret)
         :: Current_web.routes engine
       in
       let site =

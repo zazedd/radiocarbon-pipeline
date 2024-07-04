@@ -38,9 +38,13 @@ if (nrow(c) == 0) {
 original_col_len <- ncol(c)
 
 confidence_interval <- 0.95
-step <- 5
+step <- 20
 
-c.caldates <- calibrate(x = c$C14Age, errors = c$C14SD, calCurves = "intcal20", eps=1e-100, ncores=4, type="full")
+c.caldates <- calibrate(x = c$C14Age, errors = c$C14SD, calCurves = "intcal20", eps = 1e-5, ncores = 4, type = "full")
+
+DK.spd <- spd(c.caldates, timeRange = c(8000, 0))
+plot(DK.spd)
+plot(DK.spd, runm = 200, add = TRUE, type = "simple", col = "darkorange", lwd = 1.5, lty = 2) # using a rolling average of 200 years for smoothing
 
 # only consider values that are inside the confidence interval
 considered <- function(lst) {
@@ -75,12 +79,14 @@ col <- 1
 for (i in seq(from = mm[[1]], to = mm[[2]], by = step)) {
   for (j in 1:len) {
     elems <- c.caldates$grids[[j]]
-    # unfortunately there isnt a List.find equivalent function in R, but the `which` function
-    # is an equivalent to List.filter implemented in C or Fortran, so its pretty quick
-    # we are interested in the first element of this list
-    indices <- which(elems$calBP >= i - step / 2 & elems$calBP <= i + step / 2)
+
+    indices <- (which(elems$calBP >= i - step / 2 & elems$calBP <= i + step / 2))
     if (length(indices) > 0) {
-      new_cols[j, col] <- elems$PrDens[[indices[[1]]]]
+      tmp <- list()
+      for (k in 1:length(indices)) {
+        tmp <- c(elems$PrDens[[indices[[k]]]], tmp)
+      }
+      new_cols[j, col] <- sum(unlist(tmp))
     }
   }
   col <- col + 1
