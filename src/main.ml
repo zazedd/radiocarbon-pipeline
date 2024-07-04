@@ -1,4 +1,5 @@
 open Lwt.Infix
+module Github = Current_github
 
 let () = Prometheus_unix.Logging.init ()
 let program_name = "example"
@@ -7,15 +8,26 @@ let find_git_root dir =
   let cmd = [| "git"; "-C"; dir; "rev-parse"; "--show-toplevel" |] in
   Lwt_process.pread ("", cmd) >|= String.trim
 
-let main config mode repo =
+let main config app mode repo =
   Lwt_main.run
-    ( find_git_root repo >>= fun repo ->
-      let repo = Current_git.Local.v (Fpath.v repo) in
-      let engine = Current.Engine.create ~config (Pipeline.v ~repo) in
+    ( find_git_root repo >>= fun local ->
+      let get_job_ids ~owner:_ ~name:_ ~hash:_ = [] in
+      let local = Current_git.Local.v (Fpath.v local) in
+      let webhook_secret = Current_github.App.webhook_secret app in
+      let installation =
+        Github.App.installation app ~account:"zazedd" 52466164 |> Current.return
+      in
+      let engine =
+        Current.Engine.create ~config (Pipeline.v ~local ~installation)
+      in
+      let routes =
+        Routes.(
+          (s "webhooks" / s "github" /? nil)
+          @--> Current_github.webhook ~engine ~get_job_ids ~webhook_secret)
+        :: Current_web.routes engine
+      in
       let site =
-        Current_web.Site.(v ~has_role:allow_all)
-          ~name:program_name
-          (Current_web.routes engine)
+        Current_web.Site.(v ~has_role:allow_all) ~name:program_name routes
       in
       Lwt.choose
         [
@@ -39,6 +51,7 @@ let cmd =
   Cmd.v info
     Term.(
       term_result
-        (const main $ Current.Config.cmdliner $ Current_web.cmdliner $ repo))
+        (const main $ Current.Config.cmdliner $ Current_github.App.cmdliner
+       $ Current_web.cmdliner $ repo))
 
 let () = exit @@ Cmd.eval cmd

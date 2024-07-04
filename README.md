@@ -45,3 +45,5 @@ See [UNLICENSE][] for details.
 [example pipelines]: https://github.com/ocurrent/ocurrent/wiki/Example-pipelines
 [OCurrent wiki]: https://github.com/ocurrent/ocurrent/wiki
 [UNLICENSE]: ./UNLICENSE
+
+## Testing GH integration :)

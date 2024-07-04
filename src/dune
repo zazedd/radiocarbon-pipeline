@@ -6,8 +6,13 @@
    current.cache
    current_git
    current_web
-   current_docker
+   current_github
+   current_nix
+   digestif
    cmdliner
    lwt
    lwt.unix
-   prometheus-app.unix))
+   ppx_deriving_yojson.runtime
+   prometheus-app.unix)
+ (preprocess
+  (pps ppx_deriving.std ppx_deriving_yojson)))
