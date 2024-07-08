@@ -1,6 +1,5 @@
 open! Import
 open Lwt.Infix
-module Git = Current_git
 
 module Raw = struct
   module Git_hash = struct
@@ -77,7 +76,7 @@ module Raw = struct
   end
 
   module Git_commands = struct
-    type t = { path : Fpath.t }
+    type t = { path : Fpath.t; github_commit : Github.Api.Commit.t Current.t }
 
     let id = "git-commands"
 
@@ -99,7 +98,6 @@ module Raw = struct
           ( "",
             Array.of_list
               (("git" :: [ "-C"; path; "remote"; "add"; "origin" ]) @ args) )
-      (* TODO: Add other branches, not only main *)
       | `Commit_push ->
           let l =
             "git -C " ^ path ^ " commit "
@@ -131,12 +129,25 @@ module Raw = struct
 
     module Value = Current.Unit
 
-    let build { path } (job : Current.Job.t) (k : Key.t) :
+    let build { path; github_commit = _g } (job : Current.Job.t) (k : Key.t) :
         Value.t Current.or_error Lwt.t =
       let { Key.command; args } = k in
       Current.Job.start ~level:Dangerous job >>= fun () ->
       let cmd = git_cmd path command args in
-      Current.Process.exec ~cancellable:false ~job cmd
+      (Current.Process.exec ~cancellable:false ~job cmd >|= function
+       | Error m ->
+           let m = match m with `Msg s -> s in
+           let desc =
+             Format.sprintf
+               "Git command %s exited on error!\n\
+                ERROR: %s\n\
+                Was an output file already computed for the inputs provided?"
+               (command |> command_to_str)
+               m
+           in
+           Error (`Msg desc)
+       | ok -> ok)
+      >|= fun res -> res
 
     let pp = Key.pp
     let auto_cancel = true
@@ -145,88 +156,88 @@ end
 
 module GitCmds = Current_cache.Make (Raw.Git_commands)
 
-let commit_push ?schedule ~label ~path args =
+let commit_push ?schedule ~label ~path ~github_commit args d =
   let open Current.Syntax in
   let k = Raw.Git_commands.Key.{ command = `Commit_push; args } in
   Current.component "git: commit and push %a" Fmt.(string) label
   |>
-  let> _ = () |> Current.return in
+  let> _ = d in
   GitCmds.invalidate k;
-  let res = GitCmds.get ?schedule { path } k in
+  let res = GitCmds.get ?schedule { path; github_commit } k in
   GitCmds.invalidate k;
   res
 
-let push ?schedule ~label ~path args =
+let push ?schedule ~label ~path ~github_commit args =
   let open Current.Syntax in
   Current.component "git: push %a" Fmt.(string) label
   |>
   let> _ = () |> Current.return in
-  GitCmds.get ?schedule { path } { command = `Push; args }
+  GitCmds.get ?schedule { path; github_commit } { command = `Push; args }
 
-let add ?schedule ~label ~path args =
+let add ?schedule ~label ~path ~github_commit args d =
   let open Current.Syntax in
   let k = Raw.Git_commands.Key.{ command = `Add; args } in
   Current.component "git: add %a" Fmt.(string) label
   |>
-  let> _ = () |> Current.return in
+  let> _ = d in
   GitCmds.invalidate k;
-  let res = GitCmds.get ?schedule { path } k in
+  let res = GitCmds.get ?schedule { path; github_commit } k in
   GitCmds.invalidate k;
   res
 
-let status ?schedule ~label ~path () =
+let status ?schedule ~label ~path ~github_commit () =
   let open Current.Syntax in
   Current.component "git: status %a" Fmt.(string) label
   |>
   let> _ = () |> Current.return in
-  GitCmds.get ?schedule { path } { command = `Status; args = [] }
+  GitCmds.get ?schedule { path; github_commit } { command = `Status; args = [] }
 
-let add_origin ?schedule ~label ~path arg =
+let add_origin ?schedule ~label ~path ~github_commit arg d =
   let open Current.Syntax in
   let k = Raw.Git_commands.Key.{ command = `AddOrigin; args = [ arg ] } in
   Current.component "git: set origin %a" Fmt.(string) label
   |>
-  let> _ = () |> Current.return in
+  let> _ = d in
   GitCmds.invalidate k;
-  let res = GitCmds.get ?schedule { path } k in
+  let res = GitCmds.get ?schedule { path; github_commit } k in
   GitCmds.invalidate k;
   res
 
-let rm_origin ?schedule ~label ~path () =
+let rm_origin ?schedule ~label ~path ~github_commit d =
   let open Current.Syntax in
   let k = Raw.Git_commands.Key.{ command = `RmOrigin; args = [] } in
   Current.component "git: rm origin %a" Fmt.(string) label
   |>
-  let> _ = () |> Current.return in
+  let> _ = d in
   GitCmds.invalidate k;
-  let res = GitCmds.get ?schedule { path } k in
+  let res = GitCmds.get ?schedule { path; github_commit } k in
   GitCmds.invalidate k;
   res
 
 module TestC = Current_cache.Make (Raw.Git_hash)
 
-let call_cache ?schedule commit dir : Raw.Git_hash.Value.t Current.t =
+(* fix prefixes, /var/folders/.../inputs/... != inputs/... *)
+let fix_prefixes fl dir =
+  List.map
+    (fun (p, d) ->
+      let file = Fpath.base p in
+      (Fpath.(dir // file), d))
+    fl
+
+let call_cache ?schedule commit dir d : Raw.Git_hash.Value.t Current.t =
   let open Current.Syntax in
   let k = Raw.Git_hash.Key.{ dir } in
-  Current.component "grabbing hashes inside %a" Fpath.pp dir
-  |> let> commit = commit in
+  Current.component "grabbing hashes inside %a/" Fpath.pp (Fpath.base dir)
+  |> let> commit = commit and> _ = d in
      TestC.get ?schedule { commit } k
 
-let grab_hashes commit (new_hash : Raw.Git_hash.Value.t Current.t) dir =
+let grab_hashes commit ~test (new_hash : Raw.Git_hash.Value.t Current.t) dir d =
   let open Current.Syntax in
   let k = Raw.Git_hash.Key.{ dir } in
-  let old = call_cache commit dir in
+  let old = call_cache commit dir d in
   let+ old_hashes = old and+ new_hashes = new_hash in
-  (* remove prefixes, /var/folders/.../inputs/... != inputs/... *)
-  let remove_prefixes fl =
-    List.map
-      (fun (p, d) ->
-        let file = Fpath.base p in
-        (Fpath.(dir // file), d))
-      fl
-  in
-  let old_hashes = remove_prefixes old_hashes.files in
-  let new_hashes = remove_prefixes new_hashes.files in
+  let old_hashes = fix_prefixes old_hashes.files dir in
+  let new_hashes = fix_prefixes new_hashes.files dir in
   if old_hashes <> new_hashes then (
     let changed_and_new =
       List.filter (fun file -> List.mem file old_hashes |> not) new_hashes

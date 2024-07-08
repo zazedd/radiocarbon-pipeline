@@ -1,5 +1,5 @@
+open! Import
 open Lwt.Infix
-module Github = Current_github
 
 let () = Prometheus_unix.Logging.init ()
 let program_name = "example"
