@@ -34,6 +34,7 @@
               dune_3
               opam
 
+              pkg-config
               capnproto
               libffi
               libev
