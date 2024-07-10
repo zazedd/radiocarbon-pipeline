@@ -35,8 +35,13 @@
               opam
 
               capnproto
+              gmp
               sqlite
             ];
+
+            shellHook = ''
+              export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:${pkgs.sqlite.out}/lib;
+            '';
           };
         }
       );
