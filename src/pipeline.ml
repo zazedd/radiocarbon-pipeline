@@ -32,35 +32,49 @@ let fetch_commit ~github ~repo () =
   (head, Git.fetch commit_id)
 
 let output_and_config_file_names f =
-  let f = f |> Fpath.v in
-  let path = f |> Fpath.split_base |> fst |> Fpath.split_base |> fst in
-  let output_folder = Fpath.(path / "outputs") in
-  let output_file =
-    f |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
-    |> Fpath.add_ext "csv"
-  in
-  ( Fpath.(path / "config") |> Fpath.to_string,
-    Fpath.(output_folder // output_file) |> Fpath.to_string )
+  let csv = f |> Fpath.v in
+  let csv_folder = csv |> Fpath.split_base |> fst in
+  let inputs_folder = Fpath.base csv_folder in
+  let is_on_inputs = Fpath.v "inputs/" = inputs_folder in
+  match is_on_inputs with
+  | true ->
+      let root = csv_folder |> Fpath.parent in
+      let output_folder = Fpath.(root / "outputs") in
+      let output_file =
+        csv |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
+        |> Fpath.add_ext "csv"
+      in
+      (Fpath.(output_folder // output_file) |> Fpath.to_string, output_folder)
+  | false ->
+      let root = csv_folder |> Fpath.parent |> Fpath.parent in
+      let output_folder = Fpath.(root / "outputs" // inputs_folder) in
+      let output_file =
+        csv |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
+        |> Fpath.add_ext "csv"
+      in
+      (Fpath.(output_folder // output_file) |> Fpath.to_string, output_folder)
 
-let generate_script_args c =
+let generate_script_args f_cfgs =
   List.map
-    (fun file ->
-      let config_file, output_file = output_and_config_file_names file in
-      [ "Rscript"; "scripts/script.r"; file; output_file; config_file ])
-    c
+    (fun (file, config) ->
+      let output_file, output_folder = output_and_config_file_names file in
+      Bos.OS.Dir.create output_folder |> Result.get_ok |> ignore;
+      [ "Rscript"; "scripts/script.r"; file; output_file; config ])
+    f_cfgs
 
-let new_hashes in_path =
+let rec new_hashes in_path =
   let inputs = Bos.OS.Dir.contents in_path |> Result.get_ok in
-  List.map
-    (fun file ->
-      let content = Bos.OS.File.read file |> Result.get_ok in
-      (file, content |> Digestif.SHA512.digest_string |> Digestif.SHA512.to_hex))
-    inputs
+  List.fold_left
+    (fun acc inp ->
+      if Bos.OS.Dir.exists inp |> Result.get_ok then new_hashes inp @ acc
+      else
+        (let content = Bos.OS.File.read inp |> Result.get_ok in
+         ( inp,
+           content |> Digestif.SHA512.digest_string |> Digestif.SHA512.to_hex ))
+        :: acc)
+    [] inputs
 
-let run script_runs src local_src github_commit repo_path in_path output_files v
-    () =
-  (* let test = List.fold_left (fun acc s -> acc ^ ", " ^ s) "" output_files in *)
-  (* let commit_msg = Format.sprintf "'OCurrent: Automatic push %s'" test in *)
+let run script_runs local_src github_commit repo_path output_files () =
   CNix.shell ~args:script_runs ~timeout (`Git local_src) ~label:"R-script"
   |> CGit.add ~label:"new outputs" ~path:repo_path ~github_commit output_files
   |> CGit.rm_origin ~label:"https" ~path:repo_path ~github_commit
@@ -68,35 +82,39 @@ let run script_runs src local_src github_commit repo_path in_path output_files v
        "git@github.com:zazedd/inputs-outputs-R14C.git"
   |> CGit.commit_push ~label:"new outputs" ~path:repo_path ~github_commit
        [ "--all"; "-m"; "'OCurrent: Automatic push'" ]
-  |> CGit.grab_hashes src ~test:true v in_path
-(* let _ = *)
-(*   set_commit_status github_commit "Finished" (`Completed `Success) *)
-(*     "Pipeline execute" *)
-(* in *)
 
 let vv ~src ~local_src ~github_commit () =
   let* commit = src in
   let repo_path = Git.Commit.repo commit in
   let in_path = Fpath.(repo_path / "inputs") in
-  let file_hashes = new_hashes in_path in
-  let v = CGit.Raw.Git_hash.Value.{ files = file_hashes } |> Current.return in
-  let* n_c_files = CGit.grab_hashes src ~test:false v in_path src in
+  let file_hashes = new_hashes in_path |> Current.return in
+  let* n_c_files = CGit.grab_new_and_changed file_hashes in_path in
   match n_c_files with
   | Some l ->
       Logs.info (fun f -> f "Some inputs have changed.");
-      let files = List.map (fun f -> fst f |> Fpath.to_string) l in
-      let script_runs = files |> generate_script_args in
+      let files_and_configs =
+        List.map
+          (fun ((f, _), cfg) ->
+            ( f |> Fpath.to_string,
+              match cfg with
+              | None -> ""
+              | Some c -> c |> fst |> Fpath.to_string ))
+          l
+      in
+      let script_runs = files_and_configs |> generate_script_args in
+      Logs.info (fun f -> f "uh.");
       let output_files =
-        List.map (fun a -> output_and_config_file_names a |> snd) files
+        List.map
+          (fun (a, _) -> output_and_config_file_names a |> fst)
+          files_and_configs
       in
       if List.length script_runs = 0 then `Deleted_inputs |> Current.return
       else
         let+ _ =
-          run script_runs src local_src github_commit repo_path in_path
-            output_files v ()
+          run script_runs local_src github_commit repo_path output_files ()
         in
         `New_inputs
-  | None ->
+  | _ ->
       let msg = "No inputs have changed." in
       Logs.info (fun f -> f "%s" msg);
       `No_inputs |> Current.return
@@ -149,15 +167,16 @@ let v ~local ~installation () =
    DONE!
 
    TODO: 5
-   Figure out a way to pass more information to the script
-   KINDA DONE!
+   Figure out a way to pass more information to the script -> individual config files for all 
+   DONE!
 
    TODO: 6
    Add status to the git commits, like a GitHub action
-   WORKING ON IT
+   DONE!
 
    TODO: 7
    If outputs dont change, update status with a checkmark that says nothing changed
+   DONE!
 
    TODO: 8
    If the script produces a PDF output, also push it over
@@ -166,7 +185,12 @@ let v ~local ~installation () =
    Add other branches, not only main
 
    TODO: 
-   Create another v () that matches on the current state and sends the github status 
+   Create another v () that matches on the current state and sends the github status; DONE!
+
+   TODO: 
+   individual configs; DONE!
+   add more columns to the script, median value, weighted mean, max and min
+   PDF files
 
    Ideas for script args:
    1  NOTE: Inside the nix shell we can define environment variables. WE can call with script with them, 

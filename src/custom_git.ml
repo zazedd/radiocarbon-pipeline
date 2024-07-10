@@ -220,28 +220,51 @@ module TestC = Current_cache.Make (Raw.Git_hash)
 let fix_prefixes fl dir =
   List.map
     (fun (p, d) ->
+      let folder = p |> Fpath.split_base |> fst in
       let file = Fpath.base p in
-      (Fpath.(dir // file), d))
+      if folder = Fpath.v "inputs/" then (Fpath.(dir // file), d)
+      else (Fpath.(dir // folder // file), d))
     fl
 
-let call_cache ?schedule commit dir d : Raw.Git_hash.Value.t Current.t =
-  let open Current.Syntax in
-  let k = Raw.Git_hash.Key.{ dir } in
-  Current.component "grabbing hashes inside %a/" Fpath.pp (Fpath.base dir)
-  |> let> commit = commit and> _ = d in
-     TestC.get ?schedule { commit } k
+let old_hashes = ref []
 
-let grab_hashes commit ~test (new_hash : Raw.Git_hash.Value.t Current.t) dir d =
+(* let call_cache ?schedule commit dir d : Raw.Git_hash.Value.t Current.t = *)
+(*   let open Current.Syntax in *)
+(*   let k = Raw.Git_hash.Key.{ dir } in *)
+(*   Current.component "grabbing hashes inside %a/" Fpath.pp (Fpath.base dir) *)
+(*   |> let> commit = commit and> _ = d in *)
+(*      TestC.get ?schedule { commit } k *)
+
+let grab_new_and_changed (new_hash : (Fpath.t * string) list Current.t) dir =
   let open Current.Syntax in
-  let k = Raw.Git_hash.Key.{ dir } in
-  let old = call_cache commit dir d in
-  let+ old_hashes = old and+ new_hashes = new_hash in
-  let old_hashes = fix_prefixes old_hashes.files dir in
-  let new_hashes = fix_prefixes new_hashes.files dir in
-  if old_hashes <> new_hashes then (
+  let+ new_hashes = new_hash in
+  let new_hashes = fix_prefixes new_hashes dir in
+  let new_hashes =
+    (*
+       if it is not a csv then its a config file. lets leave it alone for now
+       if it is a csv, lets traverse the rest of the list 
+       and find the config file that is in the same dir
+       if there is no config file then None, else Some something. That gets handled later
+    *)
+    List.fold_left
+      (fun acc (p, d) ->
+        if Fpath.has_ext "csv" p then
+          let current_folder = p |> Fpath.split_base |> fst in
+          let config =
+            List.find_opt
+              (fun (f, _) ->
+                let folder = f |> Fpath.split_base |> fst in
+                folder = current_folder && f <> p)
+              new_hashes
+          in
+          ((p, d), config) :: acc
+        else acc)
+      [] new_hashes
+  in
+  if !old_hashes <> new_hashes then (
     let changed_and_new =
-      List.filter (fun file -> List.mem file old_hashes |> not) new_hashes
+      List.filter (fun file -> List.mem file !old_hashes |> not) new_hashes
     in
-    TestC.invalidate k;
+    old_hashes := new_hashes;
     Some changed_and_new)
   else None
