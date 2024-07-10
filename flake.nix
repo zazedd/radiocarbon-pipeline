@@ -29,9 +29,22 @@
           devShells.dev = mkShell {
             buildInputs = [ ocaml ];
             packages = with nixpkgs; [ 
-              ocamlPackages.utop
               dune_3
               opam
+              ocamlPackages.bos
+              ocamlPackages.astring
+              ocamlPackages.bos
+              ocamlPackages.cmdliner
+              ocamlPackages.duration
+              ocamlPackages.logs
+              ocamlPackages.fpath
+              ocamlPackages.lwt
+              ocamlPackages.lwt-unix
+              ocamlPackages.alcotest
+              ocamlPackages.ppx_deriving
+              ocamlPackages.prometheus
+              ocamlPackages.re
+              ocamlPackages.sqlite3
             ];
           };
         }
