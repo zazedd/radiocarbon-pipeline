@@ -1,5 +1,5 @@
 (lang dune 1.11)
-(name example)
+(name radiocarbon)
 
 (generate_opam_files true)
 
@@ -9,7 +9,7 @@
 (maintainers "talex5@gmail.com")
 
 (package
- (name example)
+ (name radiocarbon)
  (synopsis "An OCurrent pipeline")
  (description "A longer description")
  (depends

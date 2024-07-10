@@ -1,5 +1,5 @@
 (executable
- (public_name example)
+ (public_name radiocarbon)
  (name main)
  (libraries
    current
