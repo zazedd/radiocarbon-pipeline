@@ -39,12 +39,23 @@
               ocamlPackages.logs
               ocamlPackages.fpath
               ocamlPackages.lwt
-              ocamlPackages.lwt-unix
               ocamlPackages.alcotest
               ocamlPackages.ppx_deriving
               ocamlPackages.prometheus
               ocamlPackages.re
-              ocamlPackages.sqlite3
+              ocamlPackages.ppx_deriving_yojson
+              ocamlPackages.yojson
+              ocamlPackages.mirage-crypto
+              ocamlPackages.hex
+              ocamlPackages.gitlab-unix
+              ocamlPackages.cohttp-lwt-unix
+              ocamlPackages.ptime
+              ocamlPackages.rresult
+              ocamlPackages.capnp
+              ocamlPackages.stdint
+
+              capnp
+              sqlite
             ];
           };
         }
