@@ -1,13 +1,17 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-master.url = "github:NixOS/nixpkgs";
     flake-utils.url = "github:numtide/flake-utils";
   };
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, nixpkgs-master, flake-utils }:
     flake-utils.lib.eachDefaultSystem
       (system:
         let
           pkgs = import nixpkgs {
+            inherit system;
+          };
+          new-pkgs = import nixpkgs-master {
             inherit system;
           };
           ourRPackages = pkgs.rPackages.override (old: old // { overrides = {
@@ -47,14 +51,14 @@
               ocamlPackages.yojson
               ocamlPackages.mirage-crypto
               ocamlPackages.hex
-              ocamlPackages.gitlab-unix
+              new-pkgs.ocamlPackages.gitlab-unix
               ocamlPackages.cohttp-lwt-unix
               ocamlPackages.ptime
               ocamlPackages.rresult
               ocamlPackages.capnp
               ocamlPackages.stdint
 
-              capnp
+              capnproto
               sqlite
             ];
           };
