@@ -25,6 +25,15 @@
             buildInputs = [ R git ];
             packages = [ ourRPackages.rcarbon ];
           };
+
+          devShells.dev = mkShell {
+            buildInputs = [ ocaml ];
+            packages = with nixpkgs; [ 
+              ocamlPackages.utop
+              dune_3
+              opam
+            ];
+          };
         }
       );
 }
