@@ -1,3 +1,4 @@
 [submodule "vendor/ocurrent"]
 	path = vendor/ocurrent
-	url = https://github.com/zazedd/ocurrent/tree/nix
+	url = https://github.com/zazedd/ocurrent
+	branch = nix
