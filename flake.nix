@@ -35,12 +35,15 @@
               opam
 
               capnproto
+              libffi
+              libev
               gmp
               sqlite
+              graphviz
             ];
 
             shellHook = ''
-              export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:${pkgs.sqlite.out}/lib;
+              export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:${pkgs.sqlite.out}/lib:${pkgs.libffi.out}/lib;
             '';
           };
         }
