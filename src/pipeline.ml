@@ -2,6 +2,7 @@ open! Import
 open Current.Syntax
 module CNix = Custom_nix
 module CGit = Custom_git
+module PCache = Pipeline_cache
 
 type t = [ `No_inputs | `Deleted_inputs | `New_inputs ]
 
@@ -76,15 +77,19 @@ let rec new_hashes in_path =
 
 let run script_runs local_src github_commit repo_path output_files () =
   CNix.shell ~args:script_runs ~timeout (`Git local_src) ~label:"R-script"
-  |> CGit.add ~label:"new outputs" ~path:repo_path ~github_commit output_files
-  |> CGit.rm_origin ~label:"https" ~path:repo_path ~github_commit
-  |> CGit.add_origin ~label:"ssh" ~path:repo_path ~github_commit
-       "git@github.com:zazedd/inputs-outputs-R14C.git"
-  |> CGit.commit_push ~label:"new outputs" ~path:repo_path ~github_commit
-       [ "--all"; "-m"; "'OCurrent: Automatic push'" ]
+  |> Pipeline_cache.run ~path:repo_path ~output_files ~github_commit
+       ~nix_args:script_runs
+       ~remote_origin:"git@github.com:zazedd/inputs-outputs-R14C.git"
+       ~commit_message:"'OCurrent: Automatic Push'" ~label:"Test"
+(* |> CGit.add ~label:"new outputs" ~path:repo_path ~github_commit output_files *)
+(* |> CGit.rm_origin ~label:"https" ~path:repo_path ~github_commit *)
+(* |> CGit.add_origin ~label:"ssh" ~path:repo_path ~github_commit *)
+(*      "git@github.com:zazedd/inputs-outputs-R14C.git" *)
+(* |> CGit.commit_push ~label:"new outputs" ~path:repo_path ~github_commit *)
+(*      [ "--all"; "-m"; "'OCurrent: Automatic push'" ] *)
 
 let vv ~src ~local_src ~github_commit () =
-  let* commit = src in
+  let* commit = src and* github_commit = github_commit in
   let repo_path = Git.Commit.repo commit in
   let in_path = Fpath.(repo_path / "inputs") in
   let file_hashes = new_hashes in_path |> Current.return in
@@ -102,7 +107,6 @@ let vv ~src ~local_src ~github_commit () =
           l
       in
       let script_runs = files_and_configs |> generate_script_args in
-      Logs.info (fun f -> f "uh.");
       let output_files =
         List.map
           (fun (a, _) -> output_and_config_file_names a |> fst)

@@ -3,7 +3,6 @@ open Current_nix.Default
 module NixCache = Current_cache.Make (Current_nix.Nix_cmd)
 
 let shell ?level ?schedule ?timeout ?label ?flake ?path ?pool ~args src =
-  Logs.info (fun f -> f "SHELL!");
   (*
       [
         [ "Rscript"; "--version" ];
