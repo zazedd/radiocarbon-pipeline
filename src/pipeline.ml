@@ -127,7 +127,7 @@ let v ~local ~installation () =
      @@ fun repo ->
      let* repo = Current.map Github.Api.Repo.id repo and* github = github in
      let github_commit, src = fetch_commit ~github ~repo () in
-     let* ghc = github_commit in
+     (* let* ghc = github_commit in *)
      let r = vv ~src ~local_src ~github_commit () in
      Current.component "pipeline"
      |>
