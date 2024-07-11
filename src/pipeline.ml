@@ -127,6 +127,7 @@ let v ~local ~installation () =
      @@ fun repo ->
      let* repo = Current.map Github.Api.Repo.id repo and* github = github in
      let github_commit, src = fetch_commit ~github ~repo () in
+     let* ghc = github_commit in
      let r = vv ~src ~local_src ~github_commit () in
      Current.component "pipeline"
      |>
@@ -141,12 +142,6 @@ let v ~local ~installation () =
    NOTE: Project is split into 2 repos
    1 -> for the pipeline, nix shell and scripts, possibly these last two will move
    2 -> for the inputs and outputs of the pipeline
-
-   ISSUE: If the repo has just been set up, no files with run through the script, probably
-
-   ISSUE: If we delete a file, the status says its set to two different values on the same step
-
-   ISSUE: Some git status are being cached and used where they shouldnt sometimes
 
    TODO: 1
    The inputs are fixed, we should watch over the repository, specifically the inputs/ directory
@@ -185,37 +180,14 @@ let v ~local ~installation () =
    Add other branches, not only main
 
    TODO: 
-   Create another v () that matches on the current state and sends the github status; DONE!
+   Create another v () that matches on the current state and sends the github status; 
+   DONE!
 
    TODO: 
    individual configs; DONE!
    add more columns to the script, median value, weighted mean, max and min
    PDF files
 
-   TODO: mention christophers username in the commit message body
-
-   Ideas for script args:
-   1  NOTE: Inside the nix shell we can define environment variables. WE can call with script with them, 
-            it is just a matter of changing the value of each if we want something different:
-            -> Rscript scripts/script.r inputs/input.csv outputs/outputs.csv $SCRIPT_COLUMN $SCRIPT_VALUE $SCRIPT_STEP $SCRIPT_SIGMA
-
-      ISSUE: This presents an issue, which are named args. Hard things to deal with. Also we should not have anyone mess with the nix files.
-
-  
-  2.  NOTE: A file containing a simple definition of values, that gets read by the script and automatically used. Stored in the io repo
-            -> ```file
-            step=5
-            sigma=0.95
-            column=Site
-            value=Aussois
-            ```
-            -> ```file
-            step=20
-            sigma=0.90
-            column=
-            value=
-            ```
-
-       ISSUE: A small issue: this file needs to be changed everytime we want to add/modify something, before adding/modifying it.
-              That could be annoying
+   TODO: 
+   mention christophers username in the commit message body
 *)

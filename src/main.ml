@@ -15,7 +15,8 @@ let main config app mode repo =
       let local = Current_git.Local.v (Fpath.v local) in
       let webhook_secret = Current_github.App.webhook_secret app in
       let installation =
-        Github.App.installation app ~account:"zazedd" 52466164 |> Current.return
+        Github.App.installation app ~account:"RadioCarbon-Pipeline" 52677810
+        |> Current.return
       in
       let engine =
         Current.Engine.create ~config (Pipeline.v ~local ~installation)
