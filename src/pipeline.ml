@@ -192,6 +192,8 @@ let v ~local ~installation () =
    add more columns to the script, median value, weighted mean, max and min
    PDF files
 
+   TODO: mention christophers username in the commit message body
+
    Ideas for script args:
    1  NOTE: Inside the nix shell we can define environment variables. WE can call with script with them, 
             it is just a matter of changing the value of each if we want something different:
