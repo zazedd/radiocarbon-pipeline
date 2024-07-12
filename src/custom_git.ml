@@ -74,147 +74,9 @@ module Raw = struct
         paths
       >>= fun l -> Lwt.return (Ok Value.{ files = l })
   end
-
-  module Git_commands = struct
-    type t = { path : Fpath.t; github_commit : Github.Api.Commit.t Current.t }
-
-    let id = "git-commands"
-
-    let command_to_str cmd =
-      match cmd with
-      | `Commit_push -> "commit and push"
-      | `Push -> "push"
-      | `Add -> "add"
-      | `Status -> "status"
-      | `AddOrigin -> "remote add origin"
-      | `RmOrigin -> "remote rm origin"
-
-    let git_cmd path cmd args =
-      let path = Fpath.to_string path in
-      match cmd with
-      | `RmOrigin ->
-          ("", Array.of_list ("git" :: [ "-C"; path; "remote"; "rm"; "origin" ]))
-      | `AddOrigin ->
-          ( "",
-            Array.of_list
-              (("git" :: [ "-C"; path; "remote"; "add"; "origin" ]) @ args) )
-      | `Commit_push ->
-          let l =
-            "git -C " ^ path ^ " commit "
-            ^ List.fold_left (fun acc a -> acc ^ " " ^ a) "" args
-            ^ " && git -C " ^ path ^ " push -u origin main"
-          in
-          ("", Array.of_list ([ "bash"; "-c" ] @ [ l ]))
-      | c ->
-          let cmd = c |> command_to_str in
-          ("", Array.of_list (("git" :: [ "-C"; path; cmd ]) @ args))
-
-    module Key = struct
-      type t = {
-        command :
-          [ `Commit_push | `Push | `Add | `Status | `AddOrigin | `RmOrigin ];
-        args : string list;
-      }
-
-      let to_json { command; args } =
-        `Assoc
-          [
-            ("command", `String (command |> command_to_str));
-            ("args", [%derive.to_yojson: string list] args);
-          ]
-
-      let digest t = t |> to_json |> Yojson.Safe.to_string
-      let pp f t = Yojson.Safe.pretty_print f (to_json t)
-    end
-
-    module Value = Current.Unit
-
-    let build { path; github_commit = _g } (job : Current.Job.t) (k : Key.t) :
-        Value.t Current.or_error Lwt.t =
-      let { Key.command; args } = k in
-      Current.Job.start ~level:Dangerous job >>= fun () ->
-      let cmd = git_cmd path command args in
-      (Current.Process.exec ~cancellable:false ~job cmd >|= function
-       | Error m ->
-           let m = match m with `Msg s -> s in
-           let desc =
-             Format.sprintf
-               "Git command %s exited on error!\n\
-                ERROR: %s\n\
-                Was an output file already computed for the inputs provided?"
-               (command |> command_to_str)
-               m
-           in
-           Error (`Msg desc)
-       | ok -> ok)
-      >|= fun res -> res
-
-    let pp = Key.pp
-    let auto_cancel = true
-  end
 end
 
-module GitCmds = Current_cache.Make (Raw.Git_commands)
-
-let commit_push ?schedule ~label ~path ~github_commit args d =
-  let open Current.Syntax in
-  let k = Raw.Git_commands.Key.{ command = `Commit_push; args } in
-  Current.component "git: commit and push %a" Fmt.(string) label
-  |>
-  let> _ = d in
-  GitCmds.invalidate k;
-  let res = GitCmds.get ?schedule { path; github_commit } k in
-  GitCmds.invalidate k;
-  res
-
-let push ?schedule ~label ~path ~github_commit args =
-  let open Current.Syntax in
-  Current.component "git: push %a" Fmt.(string) label
-  |>
-  let> _ = () |> Current.return in
-  GitCmds.get ?schedule { path; github_commit } { command = `Push; args }
-
-let add ?schedule ~label ~path ~github_commit args d =
-  let open Current.Syntax in
-  let k = Raw.Git_commands.Key.{ command = `Add; args } in
-  Current.component "git: add %a" Fmt.(string) label
-  |>
-  let> _ = d in
-  GitCmds.invalidate k;
-  let res = GitCmds.get ?schedule { path; github_commit } k in
-  GitCmds.invalidate k;
-  res
-
-let status ?schedule ~label ~path ~github_commit () =
-  let open Current.Syntax in
-  Current.component "git: status %a" Fmt.(string) label
-  |>
-  let> _ = () |> Current.return in
-  GitCmds.get ?schedule { path; github_commit } { command = `Status; args = [] }
-
-let add_origin ?schedule ~label ~path ~github_commit arg d =
-  let open Current.Syntax in
-  let k = Raw.Git_commands.Key.{ command = `AddOrigin; args = [ arg ] } in
-  Current.component "git: set origin %a" Fmt.(string) label
-  |>
-  let> _ = d in
-  GitCmds.invalidate k;
-  let res = GitCmds.get ?schedule { path; github_commit } k in
-  GitCmds.invalidate k;
-  res
-
-let rm_origin ?schedule ~label ~path ~github_commit d =
-  let open Current.Syntax in
-  let k = Raw.Git_commands.Key.{ command = `RmOrigin; args = [] } in
-  Current.component "git: rm origin %a" Fmt.(string) label
-  |>
-  let> _ = d in
-  GitCmds.invalidate k;
-  let res = GitCmds.get ?schedule { path; github_commit } k in
-  GitCmds.invalidate k;
-  res
-
-module TestC = Current_cache.Make (Raw.Git_hash)
+module HashCash = Current_cache.Make (Raw.Git_hash)
 
 (* fix prefixes, /var/folders/.../inputs/... != inputs/... *)
 let fix_prefixes fl dir =
@@ -228,13 +90,6 @@ let fix_prefixes fl dir =
 
 let old_hashes = ref []
 
-(* let call_cache ?schedule commit dir d : Raw.Git_hash.Value.t Current.t = *)
-(*   let open Current.Syntax in *)
-(*   let k = Raw.Git_hash.Key.{ dir } in *)
-(*   Current.component "grabbing hashes inside %a/" Fpath.pp (Fpath.base dir) *)
-(*   |> let> commit = commit and> _ = d in *)
-(*      TestC.get ?schedule { commit } k *)
-
 let grab_new_and_changed (new_hash : (Fpath.t * string) list Current.t) dir =
   let open Current.Syntax in
   let+ new_hashes = new_hash in
@@ -242,9 +97,9 @@ let grab_new_and_changed (new_hash : (Fpath.t * string) list Current.t) dir =
   let new_hashes =
     (*
        if it is not a csv then its a config file. lets leave it alone for now
-       if it is a csv, lets traverse the rest of the list 
+       if it is a csv, lets traverse the list 
        and find the config file that is in the same dir
-       if there is no config file then None, else Some something. That gets handled later
+       if there is no config file then None, else Some something. 'None' gets handled later
     *)
     List.fold_left
       (fun acc (p, d) ->

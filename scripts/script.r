@@ -17,9 +17,7 @@ get_value <- function(i) {
 if (length(args) == 0) {
   stop("At least one argument must be supplied (input file).csv", call. = FALSE)
 } else if (length(args) == 1) {
-  # Default output file
-  args[2] <- "out.csv"
-  print("No output file specified, 'out.csv' will be used.")
+  stop("CAREFUL: No output file specified.", call = FALSE)
 } else if (length(args) == 2) {
   print("No config file specified. Using default values. (Confidence Interval -> 0.95, Step -> 5 years, No Filtering)")
 } else if (length(args) == 3) {
@@ -32,6 +30,10 @@ if (length(args) == 0) {
 
   print("Starting...")
 }
+
+dir_name <- dirname(args[[2]])
+pdf_name <- "plot.png"
+pdf_path <- file.path(dir_name, pdf_name)
 
 c <- read.csv(args[[1]])
 
@@ -58,9 +60,10 @@ original_col_len <- ncol(c)
 
 c.caldates <- calibrate(x = c$C14Age, errors = c$C14SD, calCurves = "intcal20", eps = 1e-5, ncores = 4, type = "full")
 
-# DK.spd <- spd(c.caldates, timeRange = c(8000, 0))
-# plot(DK.spd)
-# plot(DK.spd, runm = 200, add = TRUE, type = "simple", col = "darkorange", lwd = 1.5, lty = 2) # using a rolling average of 200 years for smoothing
+DK.spd <- spd(c.caldates, timeRange = c(8000, 0))
+plot(DK.spd)
+plot(DK.spd, runm = 200, add = TRUE, type = "simple", col = "darkorange", lwd = 1.5, lty = 2) # using a rolling average of 200 years for smoothing
+savePlot(filename = pdf_name, type = "png")
 
 # only consider values that are inside the confidence interval
 considered <- function(lst) {

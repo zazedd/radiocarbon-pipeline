@@ -4,7 +4,9 @@ open Lwt.Infix
 module Raw = struct
   module Pipeline_cache = struct
     type t = { path : Fpath.t; output_files : string list }
-    type commands = [ `Commit | `Push | `Add | `Status | `AddOrigin | `RmOrigin ]
+
+    type commands =
+      [ `Commit | `Push | `Add | `AddAll | `Status | `AddOrigin | `RmOrigin ]
 
     let id = "Pipeline-cache"
 
@@ -13,6 +15,7 @@ module Raw = struct
       | `Commit -> "commit"
       | `Push -> "push"
       | `Add -> "add"
+      | `AddAll -> "add"
       | `Status -> "status"
       | `AddOrigin -> "remote add origin"
       | `RmOrigin -> "remote rm origin"
@@ -28,11 +31,12 @@ module Raw = struct
               (("git" :: [ "-C"; path; "remote"; "add"; "origin" ]) @ args) )
       | `Commit ->
           let l = List.fold_left (fun acc a -> acc ^ " " ^ a) "" args in
-          ("", Array.of_list [ "git"; "-C"; path; "commit"; l ])
+          ("", Array.of_list [ "git"; "-C"; path; "commit"; "-am"; l ])
       | `Push ->
           ( "",
             Array.of_list [ "git"; "-C"; path; "push"; "-u"; "origin"; "main" ]
           )
+      | `AddAll -> ("", Array.of_list [ "git"; "-C"; path; "add"; "." ])
       | c ->
           let cmd = c |> git_cmd_to_str in
           ("", Array.of_list (("git" :: [ "-C"; path; cmd ]) @ args))
@@ -88,14 +92,15 @@ module Raw = struct
       let command = git_cmd path cmd args in
       exec_git_cmd ~job command error_msg
 
-    let build { path; output_files } (job : Current.Job.t) (k : Key.t) :
+    let build { path; output_files = _ } (job : Current.Job.t) (k : Key.t) :
         Value.t Current.or_error Lwt.t =
       let { github_commit = _; nix_args = _; remote_origin; commit_message } :
           Key.t =
         k
       in
       Current.Job.start ~level:Dangerous job >>= fun () ->
-      exec_git ~cmd:`Add ~job ~path ~args:output_files () >>= fun _ ->
+      (* exec_git ~cmd:`Add ~job ~path ~args:output_files () >>= fun _ -> *)
+      exec_git ~cmd:`AddAll ~job ~path ~args:[] () >>= fun _ ->
       exec_git ~cmd:`RmOrigin ~job ~path ~args:[] () >>= fun _ ->
       exec_git ~cmd:`AddOrigin ~job ~path ~args:[ remote_origin ] ()
       >>= fun _ ->

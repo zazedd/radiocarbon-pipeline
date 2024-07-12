@@ -80,7 +80,7 @@ let run script_runs local_src github_commit repo_path output_files () =
   |> Pipeline_cache.run ~path:repo_path ~output_files ~github_commit
        ~nix_args:script_runs
        ~remote_origin:"git@github.com:zazedd/inputs-outputs-R14C.git"
-       ~commit_message:"'OCurrent: Automatic Push'" ~label:"Test"
+       ~commit_message:"OCurrent: Automatic Push" ~label:"Test"
 (* |> CGit.add ~label:"new outputs" ~path:repo_path ~github_commit output_files *)
 (* |> CGit.rm_origin ~label:"https" ~path:repo_path ~github_commit *)
 (* |> CGit.add_origin ~label:"ssh" ~path:repo_path ~github_commit *)
