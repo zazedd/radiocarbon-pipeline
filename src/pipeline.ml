@@ -32,51 +32,42 @@ let fetch_commit ~github ~repo () =
   let commit_id = Current.map Github.Api.Commit.id head in
   (head, Git.fetch commit_id)
 
-let output_and_config_file_names f cfg =
-  let csv = f |> Fpath.v in
+let file_script_output_config_outputfolder ((csv, _), cfg) =
   let csv_folder = csv |> Fpath.split_base |> fst in
   let root = csv_folder |> Fpath.parent in
-  let config = match cfg with None -> Fpath.(root / "config") | Some c -> c in
   let inputs_folder = Fpath.base csv_folder in
   let is_on_inputs = Fpath.v "inputs/" = inputs_folder in
-  match is_on_inputs with
-  | true ->
-      let output_folder = Fpath.(root / "outputs") in
-      let output_file =
-        csv |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
-        |> Fpath.add_ext "csv"
-      in
-      ( Fpath.(output_folder // output_file) |> Fpath.to_string,
-        config,
-        output_folder )
-  | false ->
-      let root = root |> Fpath.parent in
-      let output_folder = Fpath.(root / "outputs" // inputs_folder) in
-      let output_file =
-        csv |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
-        |> Fpath.add_ext "csv"
-      in
-      ( Fpath.(output_folder // output_file) |> Fpath.to_string,
-        config,
-        output_folder )
+  let config =
+    match cfg with None -> Fpath.(root / "config") | Some (c, _) -> c
+  in
+  let config_contents = Bos.OS.File.read_lines config |> Result.get_ok in
+  let+ script =
+    Config_cache.grab_script ~path:config ~contents:config_contents
+  in
+  let script_no_ext = Fpath.v script |> Fpath.rem_ext |> Fpath.to_string in
+  let output_file =
+    csv |> Fpath.base |> Fpath.rem_ext
+    |> Fpath.add_ext script_no_ext
+    |> Fpath.add_ext "csv"
+  in
+  let output_folder =
+    if is_on_inputs then Fpath.(root / "outputs")
+    else Fpath.((root |> Fpath.parent) / "outputs" // inputs_folder)
+  in
+  ( csv,
+    script,
+    Fpath.(output_folder // output_file) |> Fpath.to_string,
+    config,
+    output_folder )
 
 let generate_script_args f_cfgs =
   List.map
-    (fun (file, config) ->
-      let output_file, config, output_folder =
-        output_and_config_file_names file config
-      in
-      Format.printf "here: %s@." (config |> Fpath.to_string);
-      let config_contents = Bos.OS.File.read_lines config |> Result.get_ok in
-      let+ script =
-        Config_cache.grab_script ~path:config ~contents:config_contents
-      in
-      Format.printf "here2@.";
+    (fun (file, script, output_file, config, output_folder) ->
       Bos.OS.Dir.create output_folder |> Result.get_ok |> ignore;
       [
         "Rscript";
         "scripts/" ^ script;
-        file;
+        file |> Fpath.to_string;
         output_file;
         config |> Fpath.to_string;
       ])
@@ -110,21 +101,12 @@ let vv ~src ~local_src ~github_commit () =
   match n_c_files with
   | Some l ->
       Logs.info (fun f -> f "Some inputs have changed.");
-      let files_and_configs =
-        List.map
-          (fun ((f, _), cfg) ->
-            ( f |> Fpath.to_string,
-              match cfg with None -> None | Some c -> Some (c |> fst) ))
-          l
+      let* f_o_cfg_of =
+        List.map file_script_output_config_outputfolder l |> Current.list_seq
       in
-      let* script_runs =
-        files_and_configs |> generate_script_args |> Current.list_seq
-      in
+      let script_runs = f_o_cfg_of |> generate_script_args in
       let output_files =
-        List.map
-          (fun (a, cfg) ->
-            output_and_config_file_names a cfg |> fun (b, _, _) -> b)
-          files_and_configs
+        List.map (fun (_, _, _, _, out_folder) -> out_folder) f_o_cfg_of
       in
       if List.length script_runs = 0 then `Deleted_inputs |> Current.return
       else
@@ -145,7 +127,6 @@ let v ~local ~installation () =
      @@ fun repo ->
      let* repo = Current.map Github.Api.Repo.id repo and* github = github in
      let github_commit, src = fetch_commit ~github ~repo () in
-     (* let* ghc = github_commit in *)
      let r = vv ~src ~local_src ~github_commit () in
      Current.component "pipeline"
      |>

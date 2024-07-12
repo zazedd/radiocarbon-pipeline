@@ -3,7 +3,7 @@ open Lwt.Infix
 
 module Raw = struct
   module Pipeline_cache = struct
-    type t = { path : Fpath.t; output_files : string list }
+    type t = { path : Fpath.t; output_files : Fpath.t list }
 
     type commands =
       [ `Commit | `Push | `Add | `AddAll | `Status | `AddOrigin | `RmOrigin ]
