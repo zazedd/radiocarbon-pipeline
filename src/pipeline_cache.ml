@@ -65,17 +65,6 @@ module Raw = struct
 
     module Value = Current.Unit
 
-    let handle_context ~job context fn =
-      let open Lwt_result.Infix in
-      match context with
-      | `No_context -> Current.Process.with_tmpdir ~prefix:"build-context-" fn
-      | `Dir path ->
-          Current.Process.with_tmpdir ~prefix:"build-context-" @@ fun dir ->
-          Current.Process.exec ~cwd:dir ~cancellable:false ~job
-            ("", [| "rsync"; "-aHq"; Fpath.to_string path ^ "/"; "." |])
-          >>= fun () -> fn dir
-      | `Git commit -> Current_git.with_checkout ~job commit fn
-
     let exec_git_cmd ~job cmd msg =
       Current.Process.exec ~cancellable:false ~job cmd >|= function
       | Error m ->
@@ -126,5 +115,4 @@ let run ?schedule ~label ~path ~output_files ~github_commit ~nix_args
     label
   |>
   let> _ = d in
-  let res = Pipeline.get ?schedule { path; output_files } k in
-  res
+  Pipeline.get ?schedule { path; output_files } k

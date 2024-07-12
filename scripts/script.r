@@ -60,10 +60,10 @@ original_col_len <- ncol(c)
 
 c.caldates <- calibrate(x = c$C14Age, errors = c$C14SD, calCurves = "intcal20", eps = 1e-5, ncores = 4, type = "full")
 
-DK.spd <- spd(c.caldates, timeRange = c(8000, 0))
-plot(DK.spd)
-plot(DK.spd, runm = 200, add = TRUE, type = "simple", col = "darkorange", lwd = 1.5, lty = 2) # using a rolling average of 200 years for smoothing
-savePlot(filename = pdf_name, type = "png")
+# DK.spd <- spd(c.caldates, timeRange = c(8000, 0))
+# plot(DK.spd)
+# plot(DK.spd, runm = 200, add = TRUE, type = "simple", col = "darkorange", lwd = 1.5, lty = 2) # using a rolling average of 200 years for smoothing
+# savePlot(filename = pdf_name, type = "png")
 
 # only consider values that are inside the confidence interval
 considered <- function(lst) {

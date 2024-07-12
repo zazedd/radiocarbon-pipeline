@@ -32,35 +32,54 @@ let fetch_commit ~github ~repo () =
   let commit_id = Current.map Github.Api.Commit.id head in
   (head, Git.fetch commit_id)
 
-let output_and_config_file_names f =
+let output_and_config_file_names f cfg =
   let csv = f |> Fpath.v in
   let csv_folder = csv |> Fpath.split_base |> fst in
+  let root = csv_folder |> Fpath.parent in
+  let config = match cfg with None -> Fpath.(root / "config") | Some c -> c in
   let inputs_folder = Fpath.base csv_folder in
   let is_on_inputs = Fpath.v "inputs/" = inputs_folder in
   match is_on_inputs with
   | true ->
-      let root = csv_folder |> Fpath.parent in
       let output_folder = Fpath.(root / "outputs") in
       let output_file =
         csv |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
         |> Fpath.add_ext "csv"
       in
-      (Fpath.(output_folder // output_file) |> Fpath.to_string, output_folder)
+      ( Fpath.(output_folder // output_file) |> Fpath.to_string,
+        config,
+        output_folder )
   | false ->
-      let root = csv_folder |> Fpath.parent |> Fpath.parent in
+      let root = root |> Fpath.parent in
       let output_folder = Fpath.(root / "outputs" // inputs_folder) in
       let output_file =
         csv |> Fpath.base |> Fpath.rem_ext |> Fpath.add_ext "out"
         |> Fpath.add_ext "csv"
       in
-      (Fpath.(output_folder // output_file) |> Fpath.to_string, output_folder)
+      ( Fpath.(output_folder // output_file) |> Fpath.to_string,
+        config,
+        output_folder )
 
 let generate_script_args f_cfgs =
   List.map
     (fun (file, config) ->
-      let output_file, output_folder = output_and_config_file_names file in
+      let output_file, config, output_folder =
+        output_and_config_file_names file config
+      in
+      Format.printf "here: %s@." (config |> Fpath.to_string);
+      let config_contents = Bos.OS.File.read_lines config |> Result.get_ok in
+      let+ script =
+        Config_cache.grab_script ~path:config ~contents:config_contents
+      in
+      Format.printf "here2@.";
       Bos.OS.Dir.create output_folder |> Result.get_ok |> ignore;
-      [ "Rscript"; "scripts/script.r"; file; output_file; config ])
+      [
+        "Rscript";
+        "scripts/" ^ script;
+        file;
+        output_file;
+        config |> Fpath.to_string;
+      ])
     f_cfgs
 
 let rec new_hashes in_path =
@@ -80,13 +99,7 @@ let run script_runs local_src github_commit repo_path output_files () =
   |> Pipeline_cache.run ~path:repo_path ~output_files ~github_commit
        ~nix_args:script_runs
        ~remote_origin:"git@github.com:zazedd/inputs-outputs-R14C.git"
-       ~commit_message:"OCurrent: Automatic Push" ~label:"Test"
-(* |> CGit.add ~label:"new outputs" ~path:repo_path ~github_commit output_files *)
-(* |> CGit.rm_origin ~label:"https" ~path:repo_path ~github_commit *)
-(* |> CGit.add_origin ~label:"ssh" ~path:repo_path ~github_commit *)
-(*      "git@github.com:zazedd/inputs-outputs-R14C.git" *)
-(* |> CGit.commit_push ~label:"new outputs" ~path:repo_path ~github_commit *)
-(*      [ "--all"; "-m"; "'OCurrent: Automatic push'" ] *)
+       ~commit_message:"OCurrent: Automatic Push" ~label:"Git commands"
 
 let vv ~src ~local_src ~github_commit () =
   let* commit = src and* github_commit = github_commit in
@@ -101,15 +114,16 @@ let vv ~src ~local_src ~github_commit () =
         List.map
           (fun ((f, _), cfg) ->
             ( f |> Fpath.to_string,
-              match cfg with
-              | None -> ""
-              | Some c -> c |> fst |> Fpath.to_string ))
+              match cfg with None -> None | Some c -> Some (c |> fst) ))
           l
       in
-      let script_runs = files_and_configs |> generate_script_args in
+      let* script_runs =
+        files_and_configs |> generate_script_args |> Current.list_seq
+      in
       let output_files =
         List.map
-          (fun (a, _) -> output_and_config_file_names a |> fst)
+          (fun (a, cfg) ->
+            output_and_config_file_names a cfg |> fun (b, _, _) -> b)
           files_and_configs
       in
       if List.length script_runs = 0 then `Deleted_inputs |> Current.return
@@ -184,11 +198,12 @@ let v ~local ~installation () =
    Add other branches, not only main
 
    TODO: 
-   Create another v () that matches on the current state and sends the github status; 
+   Create another v () that matches on the current state and sends the github status
    DONE!
 
    TODO: 
    individual configs; DONE!
+   choose which script to run
    add more columns to the script, median value, weighted mean, max and min
    PDF files
 
