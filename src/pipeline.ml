@@ -32,7 +32,7 @@ let fetch_commit ~github ~repo () =
   let commit_id = Current.map Github.Api.Commit.id head in
   (head, Git.fetch commit_id)
 
-let file_script_output_config_outputfolder ((csv, _), cfg) =
+let file_script_output_config_outputfolder ~repo_path ((csv, _), cfg) =
   let csv_folder = csv |> Fpath.split_base |> fst in
   let root = csv_folder |> Fpath.parent in
   let inputs_folder = Fpath.base csv_folder in
@@ -52,12 +52,9 @@ let file_script_output_config_outputfolder ((csv, _), cfg) =
   in
   let output_folder =
     if is_on_inputs then Fpath.(root / "outputs")
-    else Fpath.((root |> Fpath.parent) / "outputs" // inputs_folder)
+    else Fpath.(repo_path / "outputs" // inputs_folder)
   in
-  let scripts_folder =
-    if is_on_inputs then Fpath.(root / "scripts")
-    else Fpath.((root |> Fpath.parent) / "scripts")
-  in
+  let scripts_folder = Fpath.(repo_path / "scripts") in
   ( csv,
     Fpath.(scripts_folder / script),
     Fpath.(output_folder // output_file) |> Fpath.to_string,
@@ -110,7 +107,8 @@ let vv ~src ~local_src ~github_commit () =
   | Some l ->
       Logs.info (fun f -> f "Some inputs have changed.");
       let* f_o_cfg_of =
-        List.map file_script_output_config_outputfolder l |> Current.list_seq
+        List.map (file_script_output_config_outputfolder ~repo_path) l
+        |> Current.list_seq
       in
       let script_runs = f_o_cfg_of |> generate_script_args in
       let output_files =
@@ -147,8 +145,8 @@ let v ~local ~installation () =
 
 (*
    NOTE: Project is split into 2 repos
-   1 -> for the pipeline, nix shell and scripts, possibly these last two will move
-   2 -> for the inputs and outputs of the pipeline
+   1 -> for the pipeline and nix shell
+   2 -> for the inputs outputs, and scripts of the pipeline
 
    TODO: 1
    The inputs are fixed, we should watch over the repository, specifically the inputs/ directory
@@ -181,23 +179,38 @@ let v ~local ~installation () =
    DONE!
 
    TODO: 8
-   If the script produces a PDF output, also push it over
-
-   TODO: 9
-   Add other branches, not only main
-
-   TODO: 
    Create another v () that matches on the current state and sends the github status
    DONE!
 
-   TODO: 
+   TODO: 9
    individual configs; DONE!
+
+   TODO: 10
    choose which script to run; DONE!
+
+   TODO: 11
    default config; DONE!
-   queued -> in progress
+
+   TODO: 12
+   queued -> in progress; DONE!
+   PR THIS TO OCURRENT
+
+   TODO: 13
    add more columns to the script, median value, weighted mean, max and min
+
+   TODO: 14
    PDF files
 
-   TODO: 
-   mention christophers username in the commit message body
+   TODO: 15
+   Whenever a script is changed, recompute the files dependant on it
+
+   TODO: 16
+   Christopher email setup
+
+   TODO: 17
+   PR's
+
+   TEST: 
+   Test what happens with more than one level of folders in the inputs
+   Test having mulitple files in a folder
 *)
