@@ -32,13 +32,14 @@ let fetch_commit ~github ~repo () =
   let commit_id = Current.map Github.Api.Commit.id head in
   (head, Git.fetch commit_id)
 
+let rec input_levels path cmp acc =
+  let new_path, b = Fpath.split_base path in
+  if cmp = b then acc else input_levels new_path cmp Fpath.(b // acc)
+
 let file_script_output_config_outputfolder ~repo_path ((csv, _), cfg) =
   let csv_folder = csv |> Fpath.split_base |> fst in
-  let root = csv_folder |> Fpath.parent in
-  let inputs_folder = Fpath.base csv_folder in
-  let is_on_inputs = Fpath.v "inputs/" = inputs_folder in
   let config =
-    match cfg with None -> Fpath.(root / "config") | Some (c, _) -> c
+    match cfg with None -> Fpath.(repo_path / "config") | Some (c, _) -> c
   in
   let config_contents = Bos.OS.File.read_lines config |> Result.get_ok in
   let+ script =
@@ -50,14 +51,12 @@ let file_script_output_config_outputfolder ~repo_path ((csv, _), cfg) =
     |> Fpath.add_ext script_no_ext
     |> Fpath.add_ext "csv"
   in
-  let output_folder =
-    if is_on_inputs then Fpath.(root / "outputs")
-    else Fpath.(repo_path / "outputs" // inputs_folder)
-  in
+  let output = input_levels csv_folder (Fpath.v "inputs/") output_file in
+  let output_folder = output |> Fpath.split_base |> fst in
   let scripts_folder = Fpath.(repo_path / "scripts") in
   ( csv,
     Fpath.(scripts_folder / script),
-    Fpath.(output_folder // output_file) |> Fpath.to_string,
+    output |> Fpath.to_string,
     config,
     output_folder )
 
