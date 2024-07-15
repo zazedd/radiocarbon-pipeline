@@ -32,9 +32,9 @@ let fetch_commit ~github ~repo () =
   let commit_id = Current.map Github.Api.Commit.id head in
   (head, Git.fetch commit_id)
 
-let rec input_levels path cmp acc =
+let rec output_suffix path cmp acc =
   let new_path, b = Fpath.split_base path in
-  if cmp = b then acc else input_levels new_path cmp Fpath.(b // acc)
+  if cmp = b then acc else output_suffix new_path cmp Fpath.(b // acc)
 
 let file_script_output_config_outputfolder ~repo_path ((csv, _), cfg) =
   let csv_folder = csv |> Fpath.split_base |> fst in
@@ -51,7 +51,7 @@ let file_script_output_config_outputfolder ~repo_path ((csv, _), cfg) =
     |> Fpath.add_ext script_no_ext
     |> Fpath.add_ext "csv"
   in
-  let output = input_levels csv_folder (Fpath.v "inputs/") output_file in
+  let output = output_suffix csv_folder (Fpath.v "inputs/") output_file in
   let output_folder = output |> Fpath.split_base |> fst in
   let scripts_folder = Fpath.(repo_path / "scripts") in
   ( csv,
