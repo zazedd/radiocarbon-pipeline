@@ -21,7 +21,7 @@ let status_of_state result =
         in
         Github.Api.CheckRunStatus.v ?text:(Some msg) (`Completed `Success)
     | Error (`Active _) ->
-        Github.Api.CheckRunStatus.v ?text:(Some "Running...") `Queued
+        Github.Api.CheckRunStatus.v ?text:(Some "Running...") `InProgress
     | Error (`Msg m) ->
         Github.Api.CheckRunStatus.v ?text:(Some m) (`Completed (`Failure m))
   in
@@ -184,7 +184,9 @@ let v ~local ~installation () =
 
    TODO: 
    individual configs; DONE!
-   choose which script to run
+   choose which script to run; DONE!
+   default config; DONE!
+   queued -> in progress
    add more columns to the script, median value, weighted mean, max and min
    PDF files
 
