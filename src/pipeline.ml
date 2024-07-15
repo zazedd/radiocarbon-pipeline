@@ -51,12 +51,14 @@ let file_script_output_config_outputfolder ~repo_path ((csv, _), cfg) =
     |> Fpath.add_ext script_no_ext
     |> Fpath.add_ext "csv"
   in
-  let output = output_suffix csv_folder (Fpath.v "inputs/") output_file in
-  let output_folder = output |> Fpath.split_base |> fst in
+  let out_suffix = output_suffix csv_folder (Fpath.v "inputs/") output_file in
+  let output_file = Fpath.(repo_path / "outputs/" // out_suffix) in
+  let output_folder = output_file |> Fpath.split_base |> fst in
+  Format.printf "%s@." (Fpath.to_string repo_path);
   let scripts_folder = Fpath.(repo_path / "scripts") in
   ( csv,
     Fpath.(scripts_folder / script),
-    output |> Fpath.to_string,
+    output_file |> Fpath.to_string,
     config,
     output_folder )
 
