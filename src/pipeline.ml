@@ -54,8 +54,12 @@ let file_script_output_config_outputfolder ((csv, _), cfg) =
     if is_on_inputs then Fpath.(root / "outputs")
     else Fpath.((root |> Fpath.parent) / "outputs" // inputs_folder)
   in
+  let scripts_folder =
+    if is_on_inputs then Fpath.(root / "scripts")
+    else Fpath.((root |> Fpath.parent) / "scripts")
+  in
   ( csv,
-    script,
+    Fpath.(scripts_folder / script),
     Fpath.(output_folder // output_file) |> Fpath.to_string,
     config,
     output_folder )
@@ -65,13 +69,17 @@ let generate_script_args f_cfgs =
     (fun (file, script, output_file, config, output_folder) ->
       Bos.OS.Dir.create output_folder |> Result.get_ok |> ignore;
       [
-        "Rscript";
-        "scripts/" ^ script;
-        file |> Fpath.to_string;
-        output_file;
-        config |> Fpath.to_string;
+        [ "cd"; output_folder |> Fpath.to_string ];
+        [
+          "Rscript";
+          script |> Fpath.to_string;
+          file |> Fpath.to_string;
+          output_file;
+          config |> Fpath.to_string;
+        ];
       ])
     f_cfgs
+  |> List.flatten
 
 let rec new_hashes in_path =
   let inputs = Bos.OS.Dir.contents in_path |> Result.get_ok in
