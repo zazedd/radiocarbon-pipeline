@@ -6,7 +6,11 @@ let program_name = "example"
 
 let find_git_root dir =
   let cmd = [| "git"; "-C"; dir; "rev-parse"; "--show-toplevel" |] in
-  Lwt_process.pread ("", cmd) >|= String.trim
+  let rec h s =
+    if s = "" then Lwt_process.pread ("", cmd) >|= String.trim >>= fun l -> h l
+    else s |> Lwt.return
+  in
+  h ""
 
 let main config app mode repo =
   Lwt_main.run
@@ -15,8 +19,7 @@ let main config app mode repo =
       let local = Current_git.Local.v (Fpath.v local) in
       let webhook_secret = Current_github.App.webhook_secret app in
       let installation =
-        Github.App.installation app ~account:"RadioCarbon-Pipeline" 52677810
-        |> Current.return
+        Github.App.installation app ~account:"zazedd" 52856220 |> Current.return
       in
       let engine =
         Current.Engine.create ~config (Pipeline.v ~local ~installation)

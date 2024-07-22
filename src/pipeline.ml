@@ -1,23 +1,34 @@
 open! Import
 open Current.Syntax
-module CNix = Custom_nix
-module CGit = Custom_git
-module PCache = Pipeline_cache
+module GCache = Git_cache
+module JCache = Job_cache
+module FCache = Folder_cache
+module CCache = Config_cache
+module HCache = Hash_cache
 
-type t = [ `No_inputs | `Deleted_inputs | `New_inputs ]
+(* type t = [ `Nothing_changed | `Changed_inputs ] *)
 
 let timeout = Duration.of_hour 1
 
 let status_of_state result =
   let main_status =
     match result with
-    | Ok (status : t) ->
+    | Ok status ->
         let msg =
           match status with
-          | `No_inputs -> "Finished. No inputs have changed"
-          | `Deleted_inputs -> "Finished. Some inputs were deleted."
-          | `New_inputs ->
-              "Finished. Check the output folder for new/changed outputs."
+          | `No_changes -> "Nothing has changed."
+          | `Csv_changes ->
+              "One or more CSV files have been changed/added. Check the \
+               outputs folder for modified/new files."
+          | `Config_changes ->
+              "One or more configuration files have been changed. Check the \
+               outputs folder for modified/new files."
+          | `Script_changes ->
+              "One or more script has been changed. Check the outputs folder \
+               for modified/new files."
+          | `Multiple_changes ->
+              "There have been multiple changes. Check the outputs folder for \
+               modified/new files."
         in
         Github.Api.CheckRunStatus.v ?text:(Some msg) (`Completed `Success)
     | Error (`Active _) ->
@@ -32,99 +43,35 @@ let fetch_commit ~github ~repo () =
   let commit_id = Current.map Github.Api.Commit.id head in
   (head, Git.fetch commit_id)
 
-let rec output_suffix path cmp acc =
-  let new_path, b = Fpath.split_base path in
-  if cmp = b then acc else output_suffix new_path cmp Fpath.(b // acc)
-
-let file_script_output_config_outputfolder ~repo_path ((csv, _), cfg) =
-  let csv_folder = csv |> Fpath.split_base |> fst in
-  let config =
-    match cfg with None -> Fpath.(repo_path / "config") | Some (c, _) -> c
+let generate_new_jobs ~script_files src fc =
+  let+ { script; input; config } =
+    CCache.grab_script ~script_files ~fc src |> HCache.get_hashes ~src ~fc
   in
-  let config_contents = Bos.OS.File.read_lines config |> Result.get_ok in
-  let+ script =
-    Config_cache.grab_script ~path:config ~contents:config_contents
-  in
-  let script_no_ext = Fpath.v script |> Fpath.rem_ext |> Fpath.to_string in
-  let output_file =
-    csv |> Fpath.base |> Fpath.rem_ext
-    |> Fpath.add_ext script_no_ext
-    |> Fpath.add_ext "csv"
-  in
-  let out_suffix = output_suffix csv_folder (Fpath.v "inputs/") output_file in
-  let output_file = Fpath.(repo_path / "outputs" // out_suffix) in
-  let output_folder = output_file |> Fpath.split_base |> fst in
-  Format.printf "%s@." (Fpath.to_string repo_path);
-  let scripts_folder = Fpath.(repo_path / "scripts") in
-  ( csv,
-    Fpath.(scripts_folder / script),
-    output_file |> Fpath.to_string,
-    config,
-    output_folder )
+  JCache.{ script; input; config }
 
-let generate_script_args f_cfgs =
-  List.map
-    (fun (file, script, output_file, config, output_folder) ->
-      Bos.OS.Dir.create output_folder |> Result.get_ok |> ignore;
-      [
-        [ "cd"; output_folder |> Fpath.to_string ];
-        [
-          "Rscript";
-          script |> Fpath.to_string;
-          file |> Fpath.to_string;
-          output_file;
-          config |> Fpath.to_string;
-        ];
-      ])
-    f_cfgs
-  |> List.flatten
-
-let rec new_hashes in_path =
-  let inputs = Bos.OS.Dir.contents in_path |> Result.get_ok in
-  List.fold_left
-    (fun acc inp ->
-      if Bos.OS.Dir.exists inp |> Result.get_ok then new_hashes inp @ acc
-      else
-        (let content = Bos.OS.File.read inp |> Result.get_ok in
-         ( inp,
-           content |> Digestif.SHA512.digest_string |> Digestif.SHA512.to_hex ))
-        :: acc)
-    [] inputs
-
-let run script_runs local_src github_commit repo_path output_files () =
-  CNix.shell ~args:script_runs ~timeout (`Git local_src) ~label:"R-script"
-  |> Pipeline_cache.run ~path:repo_path ~output_files ~github_commit
-       ~nix_args:script_runs
-       ~remote_origin:"git@github.com:zazedd/inputs-outputs-R14C.git"
-       ~commit_message:"OCurrent: Automatic Push" ~label:"Git commands"
-
-let vv ~src ~local_src ~github_commit () =
-  let* commit = src and* github_commit = github_commit in
-  let repo_path = Git.Commit.repo commit in
-  let in_path = Fpath.(repo_path / "inputs") in
-  let file_hashes = new_hashes in_path |> Current.return in
-  let* n_c_files = CGit.grab_new_and_changed file_hashes in_path in
-  match n_c_files with
-  | Some l ->
-      Logs.info (fun f -> f "Some inputs have changed.");
-      let* f_o_cfg_of =
-        List.map (file_script_output_config_outputfolder ~repo_path) l
-        |> Current.list_seq
-      in
-      let script_runs = f_o_cfg_of |> generate_script_args in
-      let output_files =
-        List.map (fun (_, _, _, _, out_folder) -> out_folder) f_o_cfg_of
-      in
-      if List.length script_runs = 0 then `Deleted_inputs |> Current.return
-      else
-        let+ _ =
-          run script_runs local_src github_commit repo_path output_files ()
-        in
-        `New_inputs
-  | _ ->
-      let msg = "No inputs have changed." in
-      Logs.info (fun f -> f "%s" msg);
-      `No_inputs |> Current.return
+let vv ~src ~local_src ~github_commit () : Import.status Current.t =
+  let inputs = "inputs"
+  and outputs = "outputs"
+  and scripts = "scripts"
+  and default_config = "config" in
+  let* _ = github_commit
+  and* input_files =
+    FCache.read_input_folder ~where:inputs ~config:default_config src
+  and* script_files = FCache.read_folder ~label:scripts ~where:scripts src in
+  let input_files = input_files.files |> Current.return in
+  let script_files = script_files.files in
+  let+ _ =
+    Current.list_map ~collapse_key:"jobs"
+      (module FCache)
+      (fun fc ->
+        generate_new_jobs ~script_files src fc
+        |> JCache.run_job ~local_src ~src ~inputs ~outputs)
+      input_files
+    |> GCache.add_commit_push ~label:"outputs"
+         ~remote_origin:"git@github.com:zazedd/inputs-outputs-R14C.git"
+         ~commit_message:"OCurrent: Automatic push" src
+  and+ s = GCache.diff ~label:"check for changes" src in
+  s
 
 let v ~local ~installation () =
   let local_src = Git.Local.head_commit local in
@@ -135,14 +82,11 @@ let v ~local ~installation () =
      let* repo = Current.map Github.Api.Repo.id repo and* github = github in
      let github_commit, src = fetch_commit ~github ~repo () in
      let r = vv ~src ~local_src ~github_commit () in
-     Current.component "pipeline"
+     Current.component "finished"
      |>
      let** status = Current.state r in
-     let+ _ =
-       status |> status_of_state
-       |> Github.Api.CheckRun.set_status github_commit "Pipeline Execute"
-     in
-     ()
+     status |> status_of_state
+     |> Github.Api.CheckRun.set_status github_commit "Pipeline Execute"
 
 (*
    NOTE: Project is split into 2 repos
@@ -192,26 +136,31 @@ let v ~local ~installation () =
    TODO: 11
    default config; DONE!
 
+   WEEK 4
+
    TODO: 12
    queued -> in progress; DONE!
    PR THIS TO OCURRENT
 
    TODO: 13
-   add more columns to the script, median value, weighted mean, max and min
+   Support for nested folders; DONE!
 
    TODO: 14
-   PDF files
+   add more columns to the script, median value, weighted mean, max and min
 
    TODO: 15
-   Whenever a script is changed, recompute the files dependant on it
+   PDF files; DONE!
+   Change their name to time stamps
 
    TODO: 16
-   Christopher email setup
+   Whenever a script is changed, recompute the files dependant on it
 
    TODO: 17
+   Christopher email setup; DONE!
+
+   TODO: 18
    PR's
 
-   TEST: 
-   Test what happens with more than one level of folders in the inputs
-   Test having mulitple files in a folder
+   CKDE -> ggplot2
+   weighted mean on rows and on the cumulative row
 *)
