@@ -6,9 +6,7 @@ module FCache = Folder_cache
 module CCache = Config_cache
 module HCache = Hash_cache
 
-(* type t = [ `Nothing_changed | `Changed_inputs ] *)
-
-let timeout = Duration.of_hour 1
+let timeout = Duration.of_hour 2
 
 let status_of_state result =
   let main_status =
@@ -38,10 +36,9 @@ let status_of_state result =
   in
   main_status |> Current.return
 
-let fetch_commit ~github ~repo () =
-  let head = Github.Api.head_commit github repo in
+let fetch_commit ~head () =
   let commit_id = Current.map Github.Api.Commit.id head in
-  (head, Git.fetch commit_id)
+  Git.fetch commit_id
 
 let generate_new_jobs ~script_files src fc =
   let+ { script; input; config } =
@@ -57,7 +54,8 @@ let vv ~src ~local_src ~github_commit () : Import.status Current.t =
   let* _ = github_commit
   and* input_files =
     FCache.read_input_folder ~where:inputs ~config:default_config src
-  and* script_files = FCache.read_folder ~label:scripts ~where:scripts src in
+  and* script_files = FCache.read_folder ~label:scripts ~where:scripts src
+  and* { remote_origin; branch } = GCache.remote_and_branch github_commit in
   let input_files = input_files.files |> Current.return in
   let script_files = script_files.files in
   let+ _ =
@@ -67,26 +65,27 @@ let vv ~src ~local_src ~github_commit () : Import.status Current.t =
         generate_new_jobs ~script_files src fc
         |> JCache.run_job ~local_src ~src ~inputs ~outputs)
       input_files
-    |> GCache.add_commit_push ~label:"outputs"
-         ~remote_origin:"git@github.com:zazedd/inputs-outputs-R14C.git"
+    |> GCache.add_commit_push ~label:"outputs" ~remote_origin ~branch
          ~commit_message:"OCurrent: Automatic push" src
   and+ s = GCache.diff ~label:"check for changes" src in
   s
 
 let v ~local ~installation () =
   let local_src = Git.Local.head_commit local in
-  let github = Current.map Github.Installation.api installation in
   Github.Installation.repositories installation
   |> Current.list_iter ~collapse_key:"repos" (module Github.Api.Repo)
      @@ fun repo ->
-     let* repo = Current.map Github.Api.Repo.id repo and* github = github in
-     let github_commit, src = fetch_commit ~github ~repo () in
-     let r = vv ~src ~local_src ~github_commit () in
-     Current.component "finished"
-     |>
-     let** status = Current.state r in
-     status |> status_of_state
-     |> Github.Api.CheckRun.set_status github_commit "Pipeline Execute"
+     let refs = Github.Api.Repo.ci_refs ~staleness:(Duration.of_day 93) repo in
+     refs
+     |> Current.list_iter ~collapse_key:"refs" (module Github.Api.Commit)
+        @@ fun head ->
+        let src = fetch_commit ~head () in
+        let r = vv ~src ~local_src ~github_commit:head () in
+        Current.component "finished"
+        |>
+        let** status = Current.state r in
+        status |> status_of_state
+        |> Github.Api.CheckRun.set_status head "Pipeline Execute"
 
 (*
    NOTE: Project is split into 2 repos
@@ -146,21 +145,18 @@ let v ~local ~installation () =
    Support for nested folders; DONE!
 
    TODO: 14
-   add more columns to the script, median value, weighted mean, max and min
+   add more columns to the script, weighted mean; DONE!
 
    TODO: 15
    PDF files; DONE!
-   Change their name to time stamps
+   Change their name to time stamps; DONE!
 
    TODO: 16
-   Whenever a script is changed, recompute the files dependant on it
+   Whenever a script is changed, recompute the files dependant on it; DONE!
 
    TODO: 17
    Christopher email setup; DONE!
 
    TODO: 18
    PR's
-
-   CKDE -> ggplot2
-   weighted mean on rows and on the cumulative row
 *)
