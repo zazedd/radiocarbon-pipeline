@@ -11,14 +11,13 @@
 (package
  (name radiocarbon)
  (synopsis "An OCurrent pipeline")
- (description "A longer description")
+ (description "A longer description of the radiocarbon pipeline.")
  (depends
+  (ocaml (>= 4.08.0))
   (prometheus-app (>= 1.0))
-  (digestif
-   fmt
-   lwt
-   lwt.unix
-   cmdliner
-   ppx_deriving_yojson.runtime
-   prometheus-app.unix
-  (ocaml (>= 4.08.0))))
+  digestif
+  fmt
+  lwt
+  cmdliner
+  ppx_deriving_yojson)
+)
