@@ -14,10 +14,11 @@
  (description "A longer description")
  (depends
   (prometheus-app (>= 1.0))
-  (current (>= 0.3))
-  current_web
-  current_git
-  fmt
-  lwt
-  cmdliner
+  (digestif
+   fmt
+   lwt
+   lwt.unix
+   cmdliner
+   ppx_deriving_yojson.runtime
+   prometheus-app.unix
   (ocaml (>= 4.08.0))))
