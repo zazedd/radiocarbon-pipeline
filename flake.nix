@@ -25,7 +25,7 @@
         {
           devShells.default = mkShell {
             buildInputs = [ R git ];
-            packages = [ ourRPackages.rcarbon ];
+            packages = [ ourRPackages.rcarbon ourRPackages.ggplot2 ourRPackages.Hmisc ourRPackages.quantreg ];
           };
 
           devShells.dev = mkShell {
