@@ -55,7 +55,7 @@ let vv ~src ~local_src ~github_commit () : Import.status Current.t =
   and* input_files =
     FCache.read_input_folder ~where:inputs ~config:default_config src
   and* script_files = FCache.read_folder ~label:scripts ~where:scripts src
-  and* { remote_origin; branch } = GCache.remote_and_branch github_commit in
+  and* remote_origin, branch = GCache.remote_and_branch github_commit in
   let input_files = input_files.files |> Current.return in
   let script_files = script_files.files in
   let+ _ =

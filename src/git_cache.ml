@@ -213,73 +213,6 @@ module Raw = struct
     let pp = Key.pp
     let auto_cancel = true
   end
-
-  module RemoteBranch = struct
-    type t = unit
-
-    let id = "git_remote_branch cache"
-
-    module Key = struct
-      type t = { github_commit : Github.Api.Commit.t }
-
-      let to_json { github_commit } =
-        `Assoc
-          [ ("commit hash", `String (Github.Api.Commit.hash github_commit)) ]
-
-      let digest t = t |> to_json |> Yojson.Safe.to_string
-      let pp f t = Yojson.Safe.pretty_print f (to_json t)
-    end
-
-    module Value = struct
-      type t = { remote_origin : string; branch : string }
-
-      let marshal t =
-        let { remote_origin; branch } = t in
-        let json =
-          `Assoc
-            [
-              ("remote_origin", `String remote_origin);
-              ("branch", `String branch);
-            ]
-        in
-        Yojson.to_string json
-
-      let unmarshal s =
-        match Yojson.Safe.from_string s with
-        | `Assoc
-            [
-              ("remote_origin", `String remote_origin);
-              ("branch", `String branch);
-            ] ->
-            { remote_origin; branch }
-        | _ -> failwith "Failed to unmarshal files"
-    end
-
-    let build _ (job : Current.Job.t) (k : Key.t) :
-        Value.t Current.or_error Lwt.t =
-      let { github_commit } : Key.t = k in
-      Current.Job.start ~level:Dangerous job >>= fun () ->
-      let remote_origin =
-        match Github.Api.Commit.pr_fork_owner_name github_commit with
-        | Some ownername -> Format.sprintf "git@github.com:%s" ownername
-        | None ->
-            Format.asprintf "git@github.com:%a" Github.Api.Commit.pp_short
-              github_commit
-            |> String.split_on_char '\n' |> List.hd
-      in
-      let remote_origin = remote_origin ^ ".git" in
-      let branch =
-        match Github.Api.Commit.branch_name github_commit with
-        | Some b -> b
-        | None ->
-            Option.value ~default:"main"
-              (Github.Api.Commit.pr_fork_branch_name github_commit)
-      in
-      Ok Value.{ remote_origin; branch } |> Lwt.return >|= fun res -> res
-
-    let pp = Key.pp
-    let auto_cancel = true
-  end
 end
 
 module GCommands = Current_cache.Make (Raw.Commands)
@@ -307,12 +240,23 @@ let diff ?schedule ~label github_src =
   let k = Raw.Diff.Key.{ commit } in
   GDiff.get ?schedule { path } k
 
-module GRemoteBranch = Current_cache.Make (Raw.RemoteBranch)
-
-let remote_and_branch ?schedule github =
+let remote_and_branch github =
   let open Current.Syntax in
-  Current.component "git: remote origin and branch"
-  |>
-  let> github_commit = github in
-  let k = Raw.RemoteBranch.Key.{ github_commit } in
-  GRemoteBranch.get ?schedule () k
+  let+ github_commit = github in
+  let remote_origin =
+    match Github.Api.Commit.pr_fork_owner_name github_commit with
+    | Some ownername -> Format.sprintf "git@github.com:%s" ownername
+    | None ->
+        Format.asprintf "git@github.com:%a" Github.Api.Commit.pp_short
+          github_commit
+        |> String.split_on_char '\n' |> List.hd
+  in
+  let remote_origin = remote_origin ^ ".git" in
+  let branch =
+    match Github.Api.Commit.branch_name github_commit with
+    | Some b -> b
+    | None ->
+        Option.value ~default:"main"
+          (Github.Api.Commit.pr_fork_branch_name github_commit)
+  in
+  (remote_origin, branch)
