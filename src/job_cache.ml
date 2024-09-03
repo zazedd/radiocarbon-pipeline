@@ -120,9 +120,18 @@ module Raw = struct
       let { script; input; config } : Key.t = k in
       let s, _ = script and i, _ = input and c, _ = config in
       let script_no_ext = s |> Fpath.base |> Fpath.rem_ext |> Fpath.to_string in
+      let current_time = Unix.localtime (Unix.time ()) in
+      let formatted_time =
+        Printf.sprintf "%02d-%02d-%04d@%02d:%02d:%02d" current_time.Unix.tm_mday
+          (current_time.Unix.tm_mon + 1) (* tm_mon is zero-indexed *)
+          (current_time.Unix.tm_year + 1900) (* tm_year is years since 1900 *)
+          current_time.Unix.tm_hour current_time.Unix.tm_min
+          current_time.Unix.tm_sec
+      in
       let output_file_name =
         i |> Fpath.base |> Fpath.rem_ext
         |> Fpath.add_ext script_no_ext
+        |> Fpath.add_ext formatted_time
         |> Fpath.add_ext "csv"
       in
       let input_directory =
