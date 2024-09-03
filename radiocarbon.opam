@@ -2,12 +2,14 @@
 opam-version: "2.0"
 synopsis: "An OCurrent pipeline"
 description: "A longer description of the radiocarbon pipeline."
-maintainer: ["talex5@gmail.com"]
-authors: ["talex5@gmail.com"]
-homepage: "https://github.com/ocurrent/ocurrent-skeleton"
-bug-reports: "https://github.com/ocurrent/ocurrent-skeleton/issues"
+maintainer: ["Maintainer Name"]
+authors: ["Author Name"]
+license: "LICENSE"
+homepage: "https://github.com/username/reponame"
+doc: "https://url/to/documentation"
+bug-reports: "https://github.com/username/reponame/issues"
 depends: [
-  "dune" {>= "1.11"}
+  "dune" {>= "3.0"}
   "ocaml" {>= "4.08.0"}
   "prometheus-app" {>= "1.0"}
   "digestif"
@@ -15,9 +17,10 @@ depends: [
   "lwt"
   "cmdliner"
   "ppx_deriving_yojson"
+  "odoc" {with-doc}
 ]
 build: [
-  ["dune" "subst"] {pinned}
+  ["dune" "subst"] {dev}
   [
     "dune"
     "build"
@@ -30,4 +33,4 @@ build: [
     "@doc" {with-doc}
   ]
 ]
-dev-repo: "git+https://github.com/ocurrent/ocurrent-skeleton.git"
+dev-repo: "git+https://github.com/username/reponame.git"

@@ -1,12 +1,20 @@
-(lang dune 1.11)
+(lang dune 3.0)
+
 (name radiocarbon)
 
 (generate_opam_files true)
 
-; Edit these to give your project's URL, authors and maintainers:
-(source (github ocurrent/ocurrent-skeleton))
-(authors "talex5@gmail.com")
-(maintainers "talex5@gmail.com")
+(source
+ (github username/reponame))
+
+(authors "Author Name")
+
+(maintainers "Maintainer Name")
+
+(license LICENSE)
+
+(documentation https://url/to/documentation)
+
 
 (package
  (name radiocarbon)

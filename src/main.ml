@@ -38,6 +38,7 @@ let main config app mode account id repo =
           Current.Engine.thread engine;
           (* The main thread evaluating the pipeline. *)
           Current_web.run ~mode site;
+          Website.run Website.handler;
           (* Optional: provides a web UI *)
         ] )
 

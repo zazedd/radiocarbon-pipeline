@@ -5,4 +5,4 @@ val main :
   string ->
   int ->
   string ->
-  ('a, [ `Msg of string ]) result
+  (unit, [ `Msg of string ]) result

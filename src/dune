@@ -1,7 +1,10 @@
+(subdir website)
+
 (executable
  (public_name radiocarbon)
  (name main)
  (libraries
+   website
    current
    current.cache
    current_git
@@ -15,3 +18,4 @@
    prometheus-app.unix)
  (preprocess
   (pps ppx_deriving.std ppx_deriving_yojson)))
+

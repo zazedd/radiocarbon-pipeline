@@ -1,3 +1,12 @@
 [submodule "vendor/ocurrent"]
 	path = vendor/ocurrent
 	url = https://github.com/zazedd/ocurrent
+[submodule "vendor/irmin"]
+	path = vendor/irmin
+	url = https://github.com/zazedd/irmin.git
+[submodule "vendor/xlsx2csv"]
+	path = vendor/xlsx2csv
+	url = https://github.com/zazedd/xlsx2csv.git
+[submodule "website"]
+	path = website
+	url = https://github.com/zazedd/radiocarbon-website.git
