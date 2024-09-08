@@ -28,7 +28,7 @@ let main config app mode account id repo =
         Routes.(
           (s "webhooks" / s "github" /? nil)
           @--> Current_github.webhook ~engine ~get_job_ids ~webhook_secret)
-        :: Current_web.routes engine
+        :: Current_web.routes ~prefix:"pipeline" engine
       in
       let site =
         Current_web.Site.(v ~has_role:allow_all) ~name:program_name routes
