@@ -31,16 +31,13 @@ let main config app mode account id repo =
         :: Current_web.routes engine
       in
       let site =
-        Current_web.Site.(v ~has_role:allow_all)
-          ~href_prefix:"/pipeline" ~name:program_name routes
+        Current_web.Site.(v ~has_role:allow_all) ~name:program_name routes
       in
       Lwt.choose
         [
           Current.Engine.thread engine;
-          (* The main thread evaluating the pipeline. *)
           Current_web.run ~mode site;
           Website.run Website.handler;
-          (* Optional: provides a web UI *)
         ] )
 
 open Cmdliner

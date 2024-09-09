@@ -28,13 +28,16 @@ let status_of_state result =
               "There have been multiple changes. Check the outputs folder for \
                modified/new files."
         in
-        Github.Api.CheckRunStatus.v ?text:(Some msg) (`Completed `Success)
+        ( Github.Api.CheckRunStatus.v ?text:(Some msg) (`Completed `Success),
+          (`Success, msg) )
     | Error (`Active _) ->
-        Github.Api.CheckRunStatus.v ?text:(Some "Running...") `InProgress
+        ( Github.Api.CheckRunStatus.v ?text:(Some "Running...") `InProgress,
+          (`Waiting, "Pipeline is processing.") )
     | Error (`Msg m) ->
-        Github.Api.CheckRunStatus.v ?text:(Some m) (`Completed (`Failure m))
+        ( Github.Api.CheckRunStatus.v ?text:(Some m) (`Completed (`Failure m)),
+          (`Failed, m) )
   in
-  main_status |> Current.return
+  main_status
 
 let fetch_commit ~head () =
   let commit_id = Current.map Github.Api.Commit.id head in
@@ -84,7 +87,9 @@ let v ~local ~installation () =
         Current.component "finished"
         |>
         let** status = Current.state r in
-        status |> status_of_state
+        let status, s = status |> status_of_state in
+        Status.set ~s;
+        status |> Current.return
         |> Github.Api.CheckRun.set_status head "Pipeline Execute"
 
 (*
