@@ -109,15 +109,17 @@ module Raw = struct
     end
 
     (* this will do a bunch of stuff
-       it grabs the current job, and then:
-       1: creates the output file name, relative and absolute,
-       2: creates a temporary diretory to store the files created by the nix shell
-       3: reads those files and stores them as the value of our cache
-       4: writes them to the correct file destinations on the remote repository
+       it grab the current job, and then:
+       1: create the csv output file name, relative and absolute,
+       2: create a temporary diretory to store extra files (like pdfs) created by the nix shell
+       3: read those files and store them as the value of our cache
+       4: write them to the correct file destinations on the remote repository
+       the git cache will then push them over
     *)
     let build { local_commit; inputs; outputs } (job : Current.Job.t)
         (k : Key.t) : Value.t Current.or_error Lwt.t =
       let { script; input; config } : Key.t = k in
+      (* step 1 *)
       let s, _ = script and i, _ = input and c, _ = config in
       let script_no_ext = s |> Fpath.base |> Fpath.rem_ext |> Fpath.to_string in
       let current_time = Unix.localtime (Unix.time ()) in
@@ -144,6 +146,7 @@ module Raw = struct
         in
         Fpath.(outputs // suffix)
       in
+      (* step 2 *)
       Current.Job.start ~level:Dangerous job >>= fun () ->
       Current.Process.with_tmpdir @@ fun dir ->
       let tmp_output_file = Fpath.(dir // output_file_name) in
@@ -163,7 +166,9 @@ module Raw = struct
       handle_context ~job local_commit @@ fun nix_dir ->
       let flake_file = ".#" in
       let nix_cmd = Cmd.shell ([ flake_file ] @ args) in
-      ((Current.Process.exec ~cancellable:false ~job nix_cmd >|= function
+      begin
+        (* step 3 *)
+        Current.Process.exec ~cancellable:false ~job nix_cmd >|= function
         | Error _ as e -> e
         | Ok () ->
             Bos.OS.File.read Fpath.(nix_dir / "flake.lock")
@@ -177,27 +182,28 @@ module Raw = struct
                    [] dir
                  |> Result.get_ok
                in
-               Value.{ files })
-       >>= function
-       | Error _ as e -> e |> Lwt.return
-       | Ok { files } -> (
-           let folder = abs_output_file_dir in
-           Bos.OS.Dir.create folder |> function
-           | Error _ as e -> e |> Lwt.return
-           | Ok _ ->
-               Format.printf "FOLDER CREATED@.";
-               List.iter
-                 (fun (file, content) ->
-                   let file_name =
-                     Fpath.(abs_output_file_dir // (file |> Fpath.base))
-                   in
-                   Bos.OS.File.write file_name content |> Result.get_ok)
-                 files;
-               Bos.OS.Dir.contents folder |> Result.get_ok
-               |> List.map Fpath.to_string
-               |> List.iter (Format.printf "%s@.");
-               Ok Value.{ files } |> Lwt.return))
-      >|= fun res -> res
+               Value.{ files }
+      end
+      (* step 4 *)
+      >|= function
+      | Error _ as e -> e
+      | Ok { files } -> begin
+          let folder = abs_output_file_dir in
+          Bos.OS.Dir.create folder |> function
+          | Error _ as e -> e
+          | Ok _ ->
+              List.iter
+                (fun (file, content) ->
+                  let file_name =
+                    Fpath.(abs_output_file_dir // (file |> Fpath.base))
+                  in
+                  Bos.OS.File.write file_name content |> Result.get_ok)
+                files;
+              Bos.OS.Dir.contents folder |> Result.get_ok
+              |> List.map Fpath.to_string
+              |> List.iter (fun s -> Logs.info (fun f -> f "Writing %s@." s));
+              Ok Value.{ files }
+        end
 
     let pp = Key.pp
     let auto_cancel = true

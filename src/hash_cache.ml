@@ -115,7 +115,7 @@ end
 
 module HashCash = Current_cache.Make (Raw.Hashes)
 
-let get_hashes ?schedule ~src ~fc script =
+let get_paths_and_hashes ?schedule ~src ~fc script =
   let open Current.Syntax in
   Current.component "get hashes"
   |>

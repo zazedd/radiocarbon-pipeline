@@ -40,26 +40,28 @@ module Raw = struct
         Value.t Current.or_error Lwt.t =
       let { path; commit = _ } : Key.t = k in
       Current.Job.start ~level:Dangerous job >>= fun () ->
-      (Bos.OS.File.read_lines path
-       |> Result.get_ok
-       |> List.map (fun s -> String.split_on_char '=' s)
-       |> List.find (fun lst -> List.hd lst = "script")
-       |> (function
-            | [ _; script ] -> Ok (script |> Fpath.v)
-            | _ -> Error (`Msg "No script name in the config file!"))
-       |> Lwt.return
-       >|= function
-       | Error _ as e -> e
-       | Ok script -> (
-           match
-             List.find_opt (fun sc -> Fpath.base sc = script) script_files
-           with
-           | None ->
-               Error
-                 (`Msg
-                   "Script name does not match any file in the scripts/ folder")
-           | Some s -> Ok s))
-      >|= fun res -> res
+      begin
+        Bos.OS.File.read_lines path
+        |> Result.get_ok
+        |> List.map (fun s -> String.split_on_char '=' s)
+        |> List.find (fun lst -> List.hd lst = "script")
+        |> function
+        | [ _; script ] -> Ok (script |> Fpath.v)
+        | _ -> Error (`Msg "No script name in the config file!")
+      end
+      |> Lwt.return
+      >|= function
+      | Error _ as e -> e
+      | Ok script -> begin
+          match
+            List.find_opt (fun sc -> Fpath.base sc = script) script_files
+          with
+          | None ->
+              Error
+                (`Msg
+                  "Script name does not match any file in the scripts/ folder")
+          | Some s -> Ok s
+        end
 
     let pp = Key.pp
     let auto_cancel = true
