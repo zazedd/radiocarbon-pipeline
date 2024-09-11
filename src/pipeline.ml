@@ -15,24 +15,28 @@ let status_of_state result =
         let msg =
           match status with
           | `No_changes -> "Nothing has changed."
-          | `Csv_changes ->
-              "One or more CSV files have been changed/added. Check the \
-               outputs folder for modified/new files."
-          | `Config_changes ->
-              "One or more configuration files have been changed. Check the \
-               outputs folder for modified/new files."
-          | `Script_changes ->
-              "One or more script has been changed. Check the outputs folder \
-               for modified/new files."
-          | `Multiple_changes ->
-              "There have been multiple changes. Check the outputs folder for \
-               modified/new files."
+          | `Csv_changes lst ->
+              let m = status_file_list_to_strings lst in
+              "One or more CSV files have been changed/added.\n" ^ m
+              ^ "\nCheck the outputs folder for modified/new files."
+          | `Config_changes lst ->
+              let m = status_file_list_to_strings lst in
+              "One or more configuration files have been changed.\n" ^ m
+              ^ "\nCheck the outputs folder for modified/new files."
+          | `Script_changes lst ->
+              let m = status_file_list_to_strings lst in
+              "One or more script has been changed.\n" ^ m
+              ^ "\nCheck the outputs folder  for modified/new files."
+          | `Multiple_changes lst ->
+              let m = status_file_list_to_strings lst in
+              "There have been multiple changes.\n" ^ m
+              ^ "\nCheck the outputs folder for modified/new files."
         in
         ( Github.Api.CheckRunStatus.v ?text:(Some msg) (`Completed `Success),
           (`Success, msg) )
     | Error (`Active _) ->
         ( Github.Api.CheckRunStatus.v ?text:(Some "Running...") `InProgress,
-          (`Waiting, "Pipeline is processing.") )
+          (`Running, "Pipeline is processing.") )
     | Error (`Msg m) ->
         ( Github.Api.CheckRunStatus.v ?text:(Some m) (`Completed (`Failure m)),
           (`Failed, m) )
@@ -49,7 +53,8 @@ let generate_new_jobs ~script_files src fc =
   in
   JCache.{ script; input; config }
 
-let vv ~src ~local_src ~github_commit () : Import.status Current.t =
+let vv ~src ~remote_origin ~branch ~website_branch ~local_src ~github_commit ()
+    : Import.status Current.t =
   let inputs = "inputs"
   and outputs = "outputs"
   and scripts = "scripts"
@@ -57,8 +62,7 @@ let vv ~src ~local_src ~github_commit () : Import.status Current.t =
   let* _ = github_commit
   and* input_files =
     FCache.read_input_folder ~where:inputs ~config:default_config src
-  and* script_files = FCache.read_folder ~label:scripts ~where:scripts src
-  and* remote_origin, branch = GCache.remote_and_branch github_commit in
+  and* script_files = FCache.read_folder ~label:scripts ~where:scripts src in
   let input_files = input_files.files |> Current.return in
   let script_files = script_files.files in
   let+ _ =
@@ -70,7 +74,7 @@ let vv ~src ~local_src ~github_commit () : Import.status Current.t =
       input_files
     |> GCache.add_commit_push ~label:"outputs" ~remote_origin ~branch
          ~commit_message:"OCurrent: Automatic push" src
-  and+ s = GCache.diff ~label:"check for changes" src in
+  and+ s = GCache.diff ~branch:website_branch ~label:"check for changes" src in
   s
 
 let v ~local ~installation () =
@@ -83,12 +87,18 @@ let v ~local ~installation () =
      |> Current.list_iter ~collapse_key:"refs" (module Github.Api.Commit)
         @@ fun head ->
         let src = fetch_commit ~head () in
-        let r = vv ~src ~local_src ~github_commit:head () in
+        let* remote_origin, branch, website_branch =
+          GCache.remote_and_branch head
+        in
+        let r =
+          vv ~src ~remote_origin ~branch ~website_branch ~local_src
+            ~github_commit:head ()
+        in
         Current.component "finished"
         |>
         let** status = Current.state r in
         let status, s = status |> status_of_state in
-        Status.set ~s;
+        Status.set ~branch:website_branch ~s;
         status |> Current.return
         |> Github.Api.CheckRun.set_status head "Pipeline Execute"
 

@@ -14,31 +14,31 @@ let find_git_root dir =
 
 let main config app mode account id repo =
   Lwt_main.run
-    ( find_git_root repo >>= fun local ->
-      let get_job_ids ~owner:_ ~name:_ ~hash:_ = [] in
-      let local = Current_git.Local.v (Fpath.v local) in
-      let webhook_secret = Current_github.App.webhook_secret app in
-      let installation =
-        Github.App.installation app ~account id |> Current.return
-      in
-      let engine =
-        Current.Engine.create ~config (Pipeline.v ~local ~installation)
-      in
-      let routes =
-        Routes.(
-          (s "webhooks" / s "github" /? nil)
-          @--> Current_github.webhook ~engine ~get_job_ids ~webhook_secret)
-        :: Current_web.routes engine
-      in
-      let site =
-        Current_web.Site.(v ~has_role:allow_all) ~name:program_name routes
-      in
-      Lwt.choose
-        [
-          Current.Engine.thread engine;
-          Current_web.run ~mode site;
-          Website.run Website.handler;
-        ] )
+  @@ ( find_git_root repo >>= fun local ->
+       let get_job_ids ~owner:_ ~name:_ ~hash:_ = [] in
+       let local = Current_git.Local.v (Fpath.v local) in
+       let webhook_secret = Current_github.App.webhook_secret app in
+       let installation =
+         Github.App.installation app ~account id |> Current.return
+       in
+       let engine =
+         Current.Engine.create ~config (Pipeline.v ~local ~installation)
+       in
+       let routes =
+         Routes.(
+           (s "webhooks" / s "github" /? nil)
+           @--> Current_github.webhook ~engine ~get_job_ids ~webhook_secret)
+         :: Current_web.routes engine
+       in
+       let site =
+         Current_web.Site.(v ~has_role:allow_all) ~name:program_name routes
+       in
+       Lwt.choose
+         [
+           Current.Engine.thread engine;
+           Current_web.run ~mode site;
+           Website.run Website.handler;
+         ] )
 
 open Cmdliner
 

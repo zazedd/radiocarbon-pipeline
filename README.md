@@ -12,7 +12,8 @@ dune build
 ## Running
 
 Set the following:
-  - Your username at `./env/account.txt`
+  - Your GitHub username at `./env/account.txt`
+  - The input/output repo's SSH endpoint at `./env/repo.txt`
   - The GitHub app ID at `./env/gappid.txt`
   - The Installation ID of that app at `./env/ginstid.txt`
   - The GitHub app's secret key at `./env/sk.pem`

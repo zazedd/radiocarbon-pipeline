@@ -7,10 +7,22 @@ let or_raise = function Ok v -> v | Error (`Msg m) -> failwith m
 
 type status =
   [ `No_changes
-  | `Csv_changes
-  | `Config_changes
-  | `Script_changes
-  | `Multiple_changes ]
+  | `Csv_changes of string list
+  | `Config_changes of string list
+  | `Script_changes of string list
+  | `Multiple_changes of string list ]
+
+let status_file_list_to_strings lst =
+  "Files affected: "
+  ^ (lst |> List.map (Format.sprintf "%S") |> String.concat " ")
+
+let status_to_string = function
+  | `No_changes -> "No changes"
+  | `Csv_changes lst -> "CSV changes. " ^ status_file_list_to_strings lst
+  | `Config_changes lst -> "Config changes. " ^ status_file_list_to_strings lst
+  | `Script_changes lst -> "Script changes. " ^ status_file_list_to_strings lst
+  | `Multiple_changes lst ->
+      "Multiple changes. " ^ status_file_list_to_strings lst
 
 let set_commit_status commit description status check_name =
   let status =

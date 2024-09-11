@@ -102,7 +102,7 @@ module Raw = struct
   end
 
   module Diff = struct
-    type t = { path : Fpath.t }
+    type t = { path : Fpath.t; branch : string }
 
     let id = "git_diff cache"
 
@@ -125,19 +125,20 @@ module Raw = struct
     module Value = struct
       type t = Import.status
 
-      let to_string = function
-        | `No_changes -> "No changes"
-        | `Csv_changes -> "Csv changes"
-        | `Config_changes -> "Config changes"
-        | `Script_changes -> "Script changes"
-        | `Multiple_changes -> "Multiple changes"
+      let to_string = Import.status_to_string
 
-      let from_string = function
-        | "No changes" -> `No_changes
-        | "Csv changes" -> `Csv_changes
-        | "Config changes" -> `Config_changes
-        | "Script changes" -> `Script_changes
-        | "Multiple changes" -> `Multiple_changes
+      let from_string t =
+        let aux l =
+          l |> String.split_on_char '"' |> List.map String.trim
+          |> List.filter (( <> ) "")
+        in
+        match String.split_on_char ':' t with
+        | [ "No changes" ] -> `No_changes
+        | [ "CSV changes. Files affected"; xs ] -> `Csv_changes (aux xs)
+        | [ "Config changes. Files affected"; xs ] -> `Config_changes (aux xs)
+        | [ "Script changes. Files affected"; xs ] -> `Script_changes (aux xs)
+        | [ "Multiple changes. Files affected"; xs ] ->
+            `Multiple_changes (aux xs)
         | _ -> assert false
 
       let pp f t = Fmt.string f (t |> to_string)
@@ -152,14 +153,14 @@ module Raw = struct
         | _ -> failwith "Failed to unmarshal files"
     end
 
-    let exec_git_cmd ~job cmd =
+    let exec_git_cmd ~branch ~job cmd =
       Current.Process.check_output ~cancellable:false ~job cmd >|= function
       | Error (`Msg s) ->
           let msg = Format.sprintf "ERROR: git diff errored out with %s@." s in
           Logs.err (fun f -> f "ERROR: git diff errored out with %s@." s);
           Error (`Msg msg)
       | Ok s -> (
-          Format.printf "OK: diff %s@." s;
+          Logs.info (fun f -> f "OK: diff %s@." s);
           let split = s |> String.trim |> String.split_on_char '\n' in
           if List.length split = 0 then Ok `No_changes
           else
@@ -167,48 +168,61 @@ module Raw = struct
               List.map
                 (fun a ->
                   let p = Fpath.v a in
-                  (p |> base_dir, p |> Fpath.base))
+                  (p |> base_dir, p |> Fpath.base, a))
                 split
             in
-            let changes =
-              List.map
-                (fun f ->
+            let `Config_changes config, `Csv_changes csv, `Script_changes script
+                =
+              List.fold_left
+                (fun ( `Config_changes config,
+                       `Csv_changes csv,
+                       `Script_changes script ) f ->
                   match f with
-                  | dir, name
+                  | dir, name, path
                     when dir = Fpath.v "inputs/" && name = Fpath.v "config" ->
-                      `Config_changes
-                  | dir, _ when dir = Fpath.v "inputs/" -> `Csv_changes
-                  | dir, _ when dir = Fpath.v "scripts/" -> `Script_changes
-                  | _ -> `No_changes)
+                      ( `Config_changes (path :: config),
+                        `Csv_changes csv,
+                        `Script_changes script )
+                  | dir, _, path when dir = Fpath.v "inputs/" ->
+                      ( `Config_changes config,
+                        `Csv_changes (path :: csv),
+                        `Script_changes script )
+                  | dir, _, path when dir = Fpath.v "scripts/" ->
+                      ( `Config_changes config,
+                        `Csv_changes csv,
+                        `Script_changes (path :: script) )
+                  | _ ->
+                      ( `Config_changes config,
+                        `Csv_changes csv,
+                        `Script_changes script ))
+                (`Config_changes [], `Csv_changes [], `Script_changes [])
                 base_dirs_and_filenames
             in
-            let has_config =
-              List.find_opt (fun a -> a = `Config_changes) changes
+            let s =
+              ( `Running,
+                Import.status_file_list_to_strings (csv @ config @ script) )
             in
-            let has_csv = List.find_opt (fun a -> a = `Csv_changes) changes in
-            let has_script =
-              List.find_opt (fun a -> a = `Script_changes) changes
-            in
-            match (has_config, has_csv, has_script) with
-            | Some _, Some _, Some _
-            | None, Some _, Some _
-            | Some _, None, Some _
-            | Some _, Some _, None ->
-                Ok `Multiple_changes
-            | Some _, None, None -> Ok `Config_changes
-            | None, Some _, None -> Ok `Csv_changes
-            | None, None, Some _ -> Ok `Script_changes
-            | None, None, None -> Ok `No_changes)
+            Status.set ~branch ~s;
+            match (config, csv, script) with
+            | [], [], [] -> Ok `No_changes
+            | [], [], lst -> Ok (`Script_changes lst)
+            | [], lst, [] -> Ok (`Csv_changes lst)
+            | lst, [], [] -> Ok (`Config_changes lst)
+            | configs, csvs, [] -> Ok (`Multiple_changes (csvs @ configs))
+            | configs, [], scripts -> Ok (`Multiple_changes (configs @ scripts))
+            | [], csvs, scripts -> Ok (`Multiple_changes (csvs @ scripts))
+            | configs, csvs, scripts ->
+                Ok (`Multiple_changes (csvs @ configs @ scripts)))
 
     let handle_context ~job commit fn = Current_git.with_checkout ~job commit fn
 
-    let build { path } (job : Current.Job.t) (k : Key.t) :
+    let build { path; branch } (job : Current.Job.t) (k : Key.t) :
         Value.t Current.or_error Lwt.t =
       let { commit } : Key.t = k in
       Current.Job.start ~level:Dangerous job >>= fun () ->
       handle_context ~job commit @@ fun _ ->
       let cmd = git_cmd path in
-      exec_git_cmd ~job cmd >|= fun res -> res
+      exec_git_cmd ~branch ~job cmd >|= fun res -> res
 
     let pp = Key.pp
     let auto_cancel = true
@@ -231,14 +245,14 @@ let add_commit_push ?schedule ~label ~remote_origin ~branch ~commit_message src
 
 module GDiff = Current_cache.Make (Raw.Diff)
 
-let diff ?schedule ~label github_src =
+let diff ?schedule ~label ~branch github_src =
   let open Current.Syntax in
   Current.component "git: diff %a" Fmt.(string) label
   |>
   let> commit = github_src in
   let path = Git.Commit.repo commit in
   let k = Raw.Diff.Key.{ commit } in
-  GDiff.get ?schedule { path } k
+  GDiff.get ?schedule { path; branch } k
 
 let remote_and_branch github =
   let open Current.Syntax in
@@ -259,4 +273,12 @@ let remote_and_branch github =
         Option.value ~default:"main"
           (Github.Api.Commit.pr_fork_branch_name github_commit)
   in
-  (remote_origin, branch)
+  let website_branch =
+    Github.Api.Commit.branch_name github_commit |> function
+    | Some b -> b
+    | None ->
+        "pr_"
+        ^ (Github.Api.Commit.pr_fork_owner_name github_commit |> Option.get)
+        ^ (Github.Api.Commit.pr_fork_branch_name github_commit |> Option.get)
+  in
+  (remote_origin, branch, website_branch)
