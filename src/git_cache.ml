@@ -95,7 +95,7 @@ module Raw = struct
       exec_git ~cmd:`AddOrigin ~job ~path ~args:[ remote_origin ] ()
       >>= fun _ ->
       exec_git ~cmd:`Commit ~job ~path ~args:[ commit_message ] () >>= fun _ ->
-      exec_git ~cmd:(`Push branch) ~job ~path ~args:[] () >|= fun res -> res
+      exec_git ~cmd:(`Push branch) ~job ~path ~args:[] ()
 
     let pp = Key.pp
     let auto_cancel = true
@@ -222,7 +222,7 @@ module Raw = struct
       Current.Job.start ~level:Dangerous job >>= fun () ->
       handle_context ~job commit @@ fun _ ->
       let cmd = git_cmd path in
-      exec_git_cmd ~branch ~job cmd >|= fun res -> res
+      exec_git_cmd ~branch ~job cmd
 
     let pp = Key.pp
     let auto_cancel = true
