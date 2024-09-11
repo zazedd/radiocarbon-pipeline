@@ -14,7 +14,7 @@ let status_of_state result =
     | Ok status ->
         let msg =
           match status with
-          | `No_changes -> "Nothing has changed."
+          | `No_changes -> "All good!"
           | `Csv_changes lst ->
               let m = status_file_list_to_strings lst in
               "One or more CSV files have been changed/added.\n" ^ m
