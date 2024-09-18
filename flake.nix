@@ -5,49 +5,73 @@
     flake-utils.url = "github:numtide/flake-utils";
     nix-filter.url = "github:numtide/nix-filter";
   };
-  outputs = { self, nixpkgs, nixpkgs-master, nix-filter, flake-utils }:
-    flake-utils.lib.eachDefaultSystem
-      (system:
-        let
-          pkgs = import nixpkgs {
-            inherit system;
-          };
-          ourRPackages = pkgs.rPackages.override (old: old // { overrides = {
+  outputs =
+    {
+      self,
+      nixpkgs,
+      nixpkgs-master,
+      nix-filter,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        pkgs = import nixpkgs {
+          inherit system;
+        };
+        ourRPackages = pkgs.rPackages.override (
+          old:
+          old
+          // {
+            overrides = {
               sf = pkgs.rPackages.sf.overrideAttrs (attrs: {
                 configureFlags = [
                   "--with-proj-lib=${pkgs.lib.getLib pkgs.proj}/lib"
                 ];
               });
             };
-          });
-        in
-        with pkgs;
-        {
-          devShells.default = mkShell {
-            buildInputs = [ R git ];
-            packages = [ ourRPackages.rcarbon ourRPackages.ggplot2 ourRPackages.Hmisc ourRPackages.quantreg ];
-          };
+          }
+        );
+      in
+      with pkgs;
+      {
+        devShells.default = mkShell {
+          buildInputs = [
+            R
+            git
+          ];
+          packages = [
+            ourRPackages.rcarbon
+            ourRPackages.ggplot2
+            ourRPackages.Hmisc
+            ourRPackages.quantreg
+          ];
+        };
 
-          devShells.dev = mkShell {
-            buildInputs = [ ocaml ];
-            packages = [ 
-              dune_3
-              opam
+        devShells.dev = mkShell {
+          propagatedBuildInputs = [
+            pkg-config
 
-              pkg-config
-              capnproto
-              libffi
-              libev
-              gmp
-              sqlite
-              graphviz
-            ];
+            capnproto
+            gnuplot
+            gmp
+            capnproto
+            sqlite
+            libffi
+            libev
+            graphviz
+            zlib.static
+          ];
 
-            shellHook = ''
-              export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:${pkgs.sqlite.out}/lib:${pkgs.libffi.out}/lib;
-            '';
-          };
-        }
-      );
+          packages = [
+            nodejs
+          ];
+
+          shellHook = ''
+            export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:${pkgs.sqlite.out}/lib:${pkgs.libffi.out}/lib;
+            export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.zlib.static ]}:$LD_LIBRARY_PATH"
+          '';
+        };
+      }
+    );
 }
-

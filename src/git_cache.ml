@@ -12,7 +12,9 @@ module Raw = struct
       | `AddAll
       | `Status
       | `AddOrigin
-      | `RmOrigin ]
+      | `RmOrigin
+      | `Fetch
+      | `Checkout ]
 
     let id = "Pipeline-cache"
 
@@ -25,6 +27,8 @@ module Raw = struct
       | `Status -> "status"
       | `AddOrigin -> "remote add origin"
       | `RmOrigin -> "remote rm origin"
+      | `Fetch -> "fetch"
+      | `Checkout -> "checkout"
 
     let git_cmd path cmd args =
       let path = Fpath.to_string path in
@@ -90,6 +94,8 @@ module Raw = struct
         Value.t Current.or_error Lwt.t =
       let { commit = _; remote_origin; branch; commit_message } : Key.t = k in
       Current.Job.start ~level:Dangerous job >>= fun () ->
+      exec_git ~cmd:`Fetch ~job ~path ~args:[ "origin" ] () >>= fun _ ->
+      exec_git ~cmd:`Checkout ~job ~path ~args:[ branch ] () >>= fun _ ->
       exec_git ~cmd:`AddAll ~job ~path ~args:[] () >>= fun _ ->
       exec_git ~cmd:`RmOrigin ~job ~path ~args:[] () >>= fun _ ->
       exec_git ~cmd:`AddOrigin ~job ~path ~args:[ remote_origin ] ()
