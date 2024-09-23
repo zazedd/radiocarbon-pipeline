@@ -8,12 +8,14 @@ module Raw = struct
     type commands =
       [ `Commit
       | `Push of string
+      | `Pull
       | `Add
       | `AddAll
       | `Status
       | `AddOrigin
       | `RmOrigin
       | `Fetch
+      | `Config
       | `Checkout ]
 
     let id = "Pipeline-cache"
@@ -22,12 +24,14 @@ module Raw = struct
       match cmd with
       | `Commit -> "commit"
       | `Push branch -> "push to branch" ^ branch
+      | `Pull -> "pull"
       | `Add -> "add"
       | `AddAll -> "add"
       | `Status -> "status"
       | `AddOrigin -> "remote add origin"
       | `RmOrigin -> "remote rm origin"
       | `Fetch -> "fetch"
+      | `Config -> "config"
       | `Checkout -> "checkout"
 
     let git_cmd path cmd args =
@@ -44,8 +48,9 @@ module Raw = struct
           ("", Array.of_list [ "git"; "-C"; path; "commit"; "-am"; l ])
       | `Push branch ->
           ( "",
-            Array.of_list [ "git"; "-C"; path; "push"; "-u"; "origin"; branch ]
-          )
+            Array.of_list
+              ([ "git"; "-C"; path; "push"; "-u"; "origin"; branch ] @ args) )
+      | `Pull -> ("", Array.of_list ([ "git"; "-C"; path; "pull" ] @ args))
       | `AddAll -> ("", Array.of_list [ "git"; "-C"; path; "add"; "." ])
       | c ->
           let cmd = c |> git_cmd_to_str in
@@ -94,12 +99,17 @@ module Raw = struct
         Value.t Current.or_error Lwt.t =
       let { commit = _; remote_origin; branch; commit_message } : Key.t = k in
       Current.Job.start ~level:Dangerous job >>= fun () ->
-      exec_git ~cmd:`Fetch ~job ~path ~args:[ "origin" ] () >>= fun _ ->
-      exec_git ~cmd:`Checkout ~job ~path ~args:[ branch ] () >>= fun _ ->
-      exec_git ~cmd:`AddAll ~job ~path ~args:[] () >>= fun _ ->
-      exec_git ~cmd:`RmOrigin ~job ~path ~args:[] () >>= fun _ ->
+      exec_git ~cmd:`Fetch ~job ~path ~args:[ "--all" ] () >>!= fun _ ->
+      exec_git ~cmd:`Checkout ~job ~path ~args:[ branch ] () >>!= fun _ ->
+      exec_git ~cmd:`Config ~job ~path ~args:[ "pull.rebase"; "true" ] ()
+      >>!= fun _ ->
+      exec_git ~cmd:`Pull ~job ~path ~args:[ remote_origin; branch ] ()
+      >>!= fun _ ->
+      exec_git ~cmd:`AddAll ~job ~path ~args:[] () >>!= fun _ ->
+      exec_git ~cmd:`RmOrigin ~job ~path ~args:[] () >>!= fun _ ->
       exec_git ~cmd:`AddOrigin ~job ~path ~args:[ remote_origin ] ()
-      >>= fun _ ->
+      >>!= fun _ ->
+      (* this can fail even if there is nothing to commit which isnt really a failure *)
       exec_git ~cmd:`Commit ~job ~path ~args:[ commit_message ] () >>= fun _ ->
       exec_git ~cmd:(`Push branch) ~job ~path ~args:[] ()
 

@@ -186,7 +186,12 @@ module Raw = struct
       end
       (* step 4 *)
       >|= function
-      | Error _ as e -> e
+      | Error (`Msg msg) ->
+          let input_file_name_and_dir =
+            get_suffix input_directory inputs (i |> Fpath.base)
+          in
+          Logs.err (fun f -> f "JOB ERROR: %s" msg);
+          Error (`Msg (input_file_name_and_dir |> Fpath.to_string))
       | Ok { files } -> begin
           let folder = abs_output_file_dir in
           Bos.OS.Dir.create folder |> function

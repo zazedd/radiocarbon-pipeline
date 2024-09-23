@@ -7,6 +7,7 @@ let or_raise = function Ok v -> v | Error (`Msg m) -> failwith m
 
 type status =
   [ `No_changes
+  | `Internal_error of string list
   | `Csv_changes of string list
   | `Config_changes of string list
   | `Script_changes of string list
@@ -14,15 +15,21 @@ type status =
 
 let status_file_list_to_strings lst =
   "Files affected: "
-  ^ (lst |> List.map (Format.sprintf "%S") |> String.concat " ")
+  ^ (lst |> List.map (Format.sprintf "%S") |> String.concat ", ")
 
 let status_to_string = function
   | `No_changes -> "No changes"
+  | `Internal_error lst -> "Internal Error: " ^ status_file_list_to_strings lst
   | `Csv_changes lst -> "CSV changes. " ^ status_file_list_to_strings lst
   | `Config_changes lst -> "Config changes. " ^ status_file_list_to_strings lst
   | `Script_changes lst -> "Script changes. " ^ status_file_list_to_strings lst
   | `Multiple_changes lst ->
       "Multiple changes. " ^ status_file_list_to_strings lst
+
+let status_to_gh_status ?msg :
+    [ `Success | `Failed ] -> Github.Api.CheckRunStatus.conclusion = function
+  | `Success -> `Success
+  | `Failed -> `Failure (Option.get msg)
 
 let set_commit_status commit description status check_name =
   let status =
@@ -42,9 +49,6 @@ let rec get_suffix path cmp acc =
 let file_path cmp t =
   let input_dir, name = Fpath.split_base t in
   let input_dir = input_dir |> Fpath.rem_empty_seg in
-  Format.printf "%s, %s@."
-    (input_dir |> Fpath.to_string)
-    (name |> Fpath.to_string);
   get_suffix input_dir cmp name |> Fpath.to_string
 
 let rec base_dir path =

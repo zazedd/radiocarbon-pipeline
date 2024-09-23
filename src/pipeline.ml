@@ -8,32 +8,57 @@ module HCache = Hash_cache
 
 let timeout = Duration.of_hour 2
 
+(* We want JOB ERROR to take precedence.
+   Except if the status we are setting is "Running",
+   which will reset the JOB ERROR status *)
+let set_website_status ~s ~branch () =
+  match s with
+  (* | `Running, _ -> Status.set ~branch ~s *)
+  | _ -> (
+      match Status.get ~branch () with
+      | Some (`Failed, str) when String.starts_with ~prefix:"JOB ERROR:" str ->
+          ()
+      | _ -> Status.set ~branch ~s)
+
 let status_of_state result =
   let main_status =
     match result with
     | Ok status ->
-        let msg =
+        let st, msg =
           match status with
-          | `No_changes -> "All good!"
+          | `No_changes -> (`Success, "All good!")
+          | `Internal_error lst ->
+              let m = status_file_list_to_strings lst in
+              ( `Failed,
+                "There has been an error processing some files. Please double \
+                 check the configuration (if you aren't filtering on \
+                 columns/row values which don't exist) and if the C14 age \
+                 column is called `C14Age` and the error column is called \
+                 `C14SD` (case sensitive).\n" ^ m )
           | `Csv_changes lst ->
               let m = status_file_list_to_strings lst in
-              "One or more CSV files have been changed/added.\n" ^ m
-              ^ "\nCheck the outputs folder for modified/new files."
+              ( `Success,
+                "One or more CSV files have been changed/added.\n" ^ m
+                ^ "\nCheck the outputs folder for modified/new files." )
           | `Config_changes lst ->
               let m = status_file_list_to_strings lst in
-              "One or more configuration files have been changed.\n" ^ m
-              ^ "\nCheck the outputs folder for modified/new files."
+              ( `Success,
+                "One or more configuration files have been changed.\n" ^ m
+                ^ "\nCheck the outputs folder for modified/new files." )
           | `Script_changes lst ->
               let m = status_file_list_to_strings lst in
-              "One or more script has been changed.\n" ^ m
-              ^ "\nCheck the outputs folder  for modified/new files."
+              ( `Success,
+                "One or more script has been changed.\n" ^ m
+                ^ "\nCheck the outputs folder  for modified/new files." )
           | `Multiple_changes lst ->
               let m = status_file_list_to_strings lst in
-              "There have been multiple changes.\n" ^ m
-              ^ "\nCheck the outputs folder for modified/new files."
+              ( `Success,
+                "There have been multiple changes.\n" ^ m
+                ^ "\nCheck the outputs folder for modified/new files." )
         in
-        ( Github.Api.CheckRunStatus.v ?text:(Some msg) (`Completed `Success),
-          (`Success, msg) )
+        let gst = status_to_gh_status ~msg st in
+        ( Github.Api.CheckRunStatus.v ?text:(Some msg) (`Completed gst),
+          (st, msg) )
     | Error (`Active _) ->
         ( Github.Api.CheckRunStatus.v ?text:(Some "Running...") `InProgress,
           (`Running, "Pipeline is processing.") )
@@ -45,7 +70,7 @@ let status_of_state result =
 
 let fetch_commit ~head () =
   let commit_id = Current.map Github.Api.Commit.id head in
-  Git.fetch commit_id
+  Git.fetch ~ssh:true commit_id
 
 let generate_new_jobs ~script_files src fc =
   let+ { script; input; config } =
@@ -68,17 +93,34 @@ let vv ~src ~rbw ~local_src ~github_commit () : Import.status Current.t =
   and* remote_origin, branch, website_branch = rbw in
   let input_files = input_files.files |> Current.return in
   let script_files = script_files.files in
-  let+ _ =
+  let jobs =
     Current.list_map ~collapse_key:"jobs"
       (module FCache)
       (fun fc ->
         generate_new_jobs ~script_files src fc
-        |> JCache.run_job ~local_src ~src ~inputs ~outputs)
+        |> JCache.run_job ~local_src ~src ~inputs ~outputs
+        |> Current.catch)
       input_files
-    |> GCache.add_commit_push ~label:"outputs" ~remote_origin ~branch
-         ~commit_message:"OCurrent: Automatic push" src
-  and+ s = GCache.diff ~branch:website_branch ~label:"check for changes" src in
-  s
+  in
+  let errored_jobs =
+    Current.map (List.filter (function Error _ -> true | Ok _ -> false)) jobs
+  in
+  let green_jobs =
+    Current.map (List.filter (function Ok _ -> true | Error _ -> false)) jobs
+  in
+  let+ _ =
+    GCache.add_commit_push ~label:"outputs" ~remote_origin ~branch
+      ~commit_message:"OCurrent: Automatic push" src green_jobs
+  and+ s = GCache.diff ~branch:website_branch ~label:"check for changes" src
+  and+ errored_jobs = errored_jobs in
+  if List.length errored_jobs = 0 then s
+  else
+    let errors =
+      List.fold_left
+        (fun acc e -> match e with Error (`Msg msg) -> msg :: acc | _ -> acc)
+        [] errored_jobs
+    in
+    `Internal_error errors
 
 let v ~local ~installation () =
   let local_src = Git.Local.head_commit local in
@@ -96,6 +138,6 @@ let v ~local ~installation () =
         |>
         let** status = Current.state r and* _, _, website_branch = rbw in
         let status, s = status |> status_of_state in
-        Status.set ~branch:website_branch ~s;
+        set_website_status ~s ~branch:website_branch ();
         status |> Current.return
         |> Github.Api.CheckRun.set_status head "Pipeline Execute"

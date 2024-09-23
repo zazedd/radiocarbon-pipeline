@@ -165,8 +165,7 @@ module Raw = struct
         Value.t Current.or_error Lwt.t =
       let { path; commit = _ } : Key.t = k in
       Current.Job.start ~level:Dangerous job >>= fun () ->
-      Ok Value.{ files = read_folder ~folder:path } |> Lwt.return >|= fun res ->
-      res
+      Ok Value.{ files = read_folder ~folder:path } |> Lwt.return
 
     let pp = Key.pp
     let auto_cancel = true
